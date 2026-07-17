@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+  name     String
+
+  // Relaciones
+  characters Character[]
+  gamesAsDm  Game[]      @relation("GameMaster")
+}
+
+model Game {
+  id       String @id @default(uuid())
+  name     String
+  joinCode String @unique
+
+  // Relaciones
+  masterId        Int
+  master          User          @relation("GameMaster", fields: [masterId], references: [id])
+  characters      Character[]
+  notes           Note[]
+  active_monsters GameMonster[]
+}
+
+model Character {
+  id          Int     @id @default(autoincrement())
+  is_npc      Boolean
+  name        String  @unique
+  class       String
+  level       Int     @default(1)
+  race        String
+  background  String
+  alignment   String
+  exp         Int     @default(0)
+  proficiency Int     @default(2)
+  inspiration Int     @default(0)
+
+  // Stats
+  strength     Int
+  dexterity    Int
+  constitution Int
+  intelligence Int
+  wisdom       Int
+  charisma     Int
+
+  // Combate
+  armor        Int
+  initiative   Int
+  speed        Int
+  max_hp       Int
+  current_hp   Int
+  temporary_hp Int    @default(0)
+  hitDice      String
+
+  // Economía y Equipamiento 
+  gold_coins    Int  @default(0)
+  silver_coins  Int  @default(0)
+  copper_coins  Int  @default(0)
+  equipment     Json
+  proficiencies Json
+
+  // Rol e Historia
+  personality_traits String?
+  ideals             String?
+  bonds              String?
+  flaws              String?
+  feature_traits     Json?
+  spells             Json?
+
+  // Apariencia
+  age            Int?
+  height         Float?
+  skin           String?
+  weight         Float?
+  hair           String?
+  appearance_img String?
+  story          String?
+  allies         String?
+
+  // Relaciones
+  userId Int
+  user   User    @relation(fields: [userId], references: [id])
+  gameId String?
+  game   Game?   @relation(fields: [gameId], references: [id])
+}
+
+model Note {
+  id          Int    @id @default(autoincrement())
+  title       String
+  description String
+
+  // Relaciones
+  gameId String
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+}
+
+model Monster {
+  id        Int    @id @default(autoincrement())
+  name      String @unique
+  armor     Int
+  hp        Int
+  speed     Int
+  fly_speed Int?
+
+  // Stats
+  strength     Int
+  dexterity    Int
+  constitution Int
+  intelligence Int
+  wisdom       Int
+  charisma     Int
+
+  // Detalles (Usamos Json para estructurar mejor la data)
+  skills         Json?
+  senses         Json?
+  languages      String?
+  challenge      String
+  actions        Json
+  game_instances GameMonster[]
+}
+
+model GameMonster {
+  id          Int     @id @default(autoincrement())
+  custom_name String?
+  current_hp  Int
+  initiative  Int?
+
+  // Relaciones
+  gameId String
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  monsterId Int
+  monster   Monster @relation(fields: [monsterId], references: [id])
+}
