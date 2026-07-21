@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
+  NotFoundException,
   Param,
   Post,
   Put,
@@ -16,21 +18,37 @@ export class UsersController {
 
   @Get(':id')
   async getUser(@Param('id') id: string) {
-    return this.userService.getUserById(Number(id));
+    try {
+      return await this.userService.getUserById(Number(id));
+    } catch {
+      throw new NotFoundException('User not found');
+    }
   }
 
   @Post()
   async createUser(@Body() data: client.User) {
-    return this.userService.createUser(data);
+    try {
+      return await this.userService.createUser(data);
+    } catch {
+      throw new BadRequestException('Bad request, check user data');
+    }
   }
 
   @Delete(':id')
   async deleteUser(@Param('id') id: string) {
-    return this.userService.deleteUser(Number(id));
+    try {
+      return await this.userService.deleteUser(Number(id));
+    } catch {
+      throw new NotFoundException('User not found');
+    }
   }
 
   @Put(':id')
   async updateUser(@Param('id') id: string, @Body() data: client.User) {
-    return this.userService.updateUser(Number(id), data);
+    try {
+      return await this.userService.updateUser(Number(id), data);
+    } catch {
+      throw new NotFoundException('User not found');
+    }
   }
 }
