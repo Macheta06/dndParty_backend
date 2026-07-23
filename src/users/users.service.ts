@@ -17,14 +17,12 @@ export class UsersService {
     });
   }
 
-  async createUser(createUserDto: CreateUserDto): Promise<User> {
+  async createUser(createUserDto: CreateUserDto) {
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-    return this.prisma.user.create({
-      data: {
-        ...createUserDto,
-        password: hashedPassword,
-      },
+    const user = await this.prisma.user.create({
+      data: { ...createUserDto, password: hashedPassword },
     });
+    return this.excludePassword(user); // Retorna sin exponer el hash
   }
 
   async updateUser(id: number, updateUserDto: UpdateUserDto): Promise<User> {
@@ -52,5 +50,10 @@ export class UsersService {
         ...{ deleted: true },
       },
     });
+  }
+
+  private excludePassword(user: User): Omit<User, 'password'> {
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
   }
 }

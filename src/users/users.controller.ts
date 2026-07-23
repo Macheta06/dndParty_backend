@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -21,40 +20,36 @@ export class UsersController {
 
   @Get(':id')
   async getUser(@Param('id', ParseIntPipe) id: number) {
-    try {
-      return await this.userService.getUserById(id);
-    } catch {
-      throw new NotFoundException('User not found');
-    }
-  }
-
-  @Post()
-  async createUser(@Body(ValidationPipe) CreateUserDto: CreateUserDto) {
-    try {
-      return await this.userService.createUser(CreateUserDto);
-    } catch {
-      throw new BadRequestException('Bad request, check user data');
-    }
-  }
-
-  @Delete(':id')
-  async deleteUser(@Param('id', ParseIntPipe) id: number) {
     const user = await this.userService.getUserById(id);
-    if (!user) {
+    if (!user || user.deleted) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
     return user;
   }
 
+  @Post()
+  async createUser(@Body(ValidationPipe) createUserDto: CreateUserDto) {
+    return await this.userService.createUser(createUserDto);
+  }
+
+  @Delete(':id')
+  async deleteUser(@Param('id', ParseIntPipe) id: number) {
+    const user = await this.userService.getUserById(id);
+    if (!user || user.deleted) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+    return await this.userService.deleteUser(id);
+  }
+
   @Put(':id')
   async updateUser(
     @Param('id', ParseIntPipe) id: number,
-    @Body(ValidationPipe) UpdateUserDto: UpdateUserDto,
+    @Body(ValidationPipe) updateUserDto: UpdateUserDto,
   ) {
-    try {
-      return await this.userService.updateUser(id, UpdateUserDto);
-    } catch {
-      throw new NotFoundException('User not found');
+    const user = await this.userService.getUserById(id);
+    if (!user || user.deleted) {
+      throw new NotFoundException(`User with ID ${id} not found`);
     }
+    return await this.userService.updateUser(id, updateUserDto);
   }
 }
