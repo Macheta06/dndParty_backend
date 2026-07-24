@@ -1,9 +1,4 @@
-import {
-  ExceptionFilter,
-  Catch,
-  ArgumentsHost,
-  ConflictException,
-} from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Response } from 'express';
 
@@ -14,14 +9,16 @@ export class PrismaClientExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
 
     if (exception.code === 'P2002') {
-      // Error de restricción única (ej: email duplicado)
-      throw new ConflictException('El email ya está registrado');
+      return response.status(409).json({
+        statusCode: 409,
+        message: 'This email is already registered',
+      });
     }
 
     // Si no es P2002, lo dejamos pasar como error genérico
     response.status(500).json({
       statusCode: 500,
-      message: 'Error interno en la base de datos',
+      message: 'Internal server error',
     });
   }
 }

@@ -1,17 +1,42 @@
-import { Injectable } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
+import { LoginDto } from './dto/login.dto';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async register(registerDto: RegisterDto) {
-    return { message: await this.usersService.createUser(registerDto) };
+    const user = await this.usersService.createUser(registerDto);
+    return { message: 'User created successfully', user };
   }
 
-  login() {
-    // Implement login logic here
-    return { message: 'Login successful' };
+  async login(loginDto: LoginDto) {
+    const user = await this.usersService.getUserByEmailWithPassword(
+      loginDto.email,
+    );
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+    const isPasswordValid = await bcrypt.compare(
+      loginDto.password,
+      user.password,
+    );
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const payload = { email: user.email };
+    const token = await this.jwtService.signAsync(payload);
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password, ...safeUser } = user;
+    return { message: 'Login successful', user: safeUser, token };
   }
 }

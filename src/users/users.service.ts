@@ -17,6 +17,18 @@ export class UsersService {
     return this.excludePassword(user);
   }
 
+  async getUserByEmail(email: string): Promise<Omit<User, 'password'> | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    if (!user) return null;
+    return this.excludePassword(user);
+  }
+
+  async getUserByEmailWithPassword(email: string): Promise<User | null> {
+    return this.prisma.user.findUnique({ where: { email } });
+  }
+
   async createUser(
     createUserDto: CreateUserDto,
   ): Promise<Omit<User, 'password'>> {
