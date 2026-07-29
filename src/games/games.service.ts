@@ -69,7 +69,13 @@ export class GamesService {
       select: {
         id: true,
         name: true,
-        master: { select: { name: true } },
+        game: {
+          select: {
+            id: true,
+            name: true,
+            master: { select: { name: true } },
+          },
+        },
       },
     });
   }
