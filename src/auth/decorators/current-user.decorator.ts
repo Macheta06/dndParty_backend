@@ -9,7 +9,7 @@ interface RequestWithUser extends Request {
   user?: JwtPayload;
 }
 
-export const currentUser = createParamDecorator(
+export const CurrentUser = createParamDecorator(
   (data: keyof JwtPayload | undefined, ctx: ExecutionContext) => {
     const request = ctx.switchToHttp().getRequest<RequestWithUser>();
     const user = request.user;
