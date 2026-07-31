@@ -2,11 +2,14 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGameDto } from './dto/create-game.dto';
 import { randomBytes } from 'crypto';
 import { JoinGameDto } from './dto/join-game.dto';
+import { CreateNoteDto, UpdateHpDto } from './dto/dm-actions.dto';
+import { CreateCharacterDto } from '../characters/dto/create-character.dto';
 
 @Injectable()
 export class GamesService {
@@ -76,6 +79,78 @@ export class GamesService {
             master: { select: { name: true } },
           },
         },
+      },
+    });
+  }
+
+  private async verifyGameMaster(gameId: string, userId: number) {
+    const game = await this.prisma.game.findUnique({
+      where: { id: gameId },
+    });
+
+    if (!game) {
+      throw new NotFoundException('Partida no encontrada');
+    }
+    if (game.masterId !== userId) {
+      throw new ForbiddenException(
+        'Solo el Dungeon Master puede realizar esta acción',
+      );
+    }
+    return game;
+  }
+
+  async updateCharacterHp(
+    gameId: string,
+    characterId: number,
+    userId: number,
+    hpDto: UpdateHpDto,
+  ) {
+    await this.verifyGameMaster(gameId, userId);
+    const character = await this.prisma.character.findFirst({
+      where: {
+        id: characterId,
+        gameId,
+      },
+    });
+    if (!character)
+      throw new NotFoundException('El personaje no está en esta partida');
+
+    return this.prisma.character.update({
+      where: {
+        id: characterId,
+      },
+      data: { current_hp: hpDto.current_hp },
+    });
+  }
+
+  async createNpc(gameId: string, userId: number, npcDto: CreateCharacterDto) {
+    await this.verifyGameMaster(gameId, userId);
+
+    return this.prisma.character.create({
+      data: {
+        ...npcDto,
+        userId, // El DM es el dueño del registro
+        gameId, // Nace directamente vinculado a la sala
+        is_npc: true, // ¡Clave! Así no se mezcla con los jugadores
+        level: npcDto.level ?? 1,
+        exp: 0,
+        proficiency: npcDto.proficiency ?? 2,
+        inspiration: 0,
+        temporary_hp: 0,
+        equipment: npcDto.equipment ?? [],
+        spells: npcDto.spells ?? [],
+        proficiencies: npcDto.proficiencies ?? [],
+      },
+    });
+  }
+
+  async createNote(gameId: string, userId: number, noteDto: CreateNoteDto) {
+    await this.verifyGameMaster(gameId, userId);
+
+    return this.prisma.note.create({
+      data: {
+        ...noteDto,
+        gameId,
       },
     });
   }

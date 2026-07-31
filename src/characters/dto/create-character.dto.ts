@@ -17,6 +17,11 @@ export class CreateCharacterDto {
   @IsNotEmpty()
   class!: string;
 
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  level?: number;
+
   @IsString()
   @IsNotEmpty()
   race!: string;
@@ -24,6 +29,11 @@ export class CreateCharacterDto {
   @IsString()
   @IsNotEmpty()
   alignment!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  proficiency?: number;
 
   @IsString()
   @IsNotEmpty()
