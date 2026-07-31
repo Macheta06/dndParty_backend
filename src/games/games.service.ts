@@ -129,9 +129,9 @@ export class GamesService {
     return this.prisma.character.create({
       data: {
         ...npcDto,
-        userId, // El DM es el dueño del registro
-        gameId, // Nace directamente vinculado a la sala
-        is_npc: true, // ¡Clave! Así no se mezcla con los jugadores
+        userId,
+        gameId,
+        is_npc: true,
         level: npcDto.level ?? 1,
         exp: 0,
         proficiency: npcDto.proficiency ?? 2,
