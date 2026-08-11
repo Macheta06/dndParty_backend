@@ -29,7 +29,7 @@ export class GamesController {
     return this.gameService.createGame(masterId, createGameDto);
   }
 
-  @Get()
+  @Get('my-games')
   getMyGames(@CurrentUser('sub') masterId: number) {
     return this.gameService.getGamesByMaster(masterId);
   }
