@@ -34,6 +34,11 @@ export class GamesController {
     return this.gameService.getGamesByMaster(masterId);
   }
 
+  @Get(':id')
+  getGameByID(@Param('id') id: string) {
+    return this.gameService.getGameById(id);
+  }
+
   @Post('join')
   joinGame(
     @Body() joinGameDto: JoinGameDto,

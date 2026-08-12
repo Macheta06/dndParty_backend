@@ -35,6 +35,22 @@ export class GamesService {
     });
   }
 
+  async getGameById(id: string) {
+    const game = await this.prisma.game.findUnique({
+      where: { id },
+      include: {
+        characters: true,
+        notes: true,
+      },
+    });
+
+    if (!game) {
+      throw new NotFoundException('Partida no encontrada');
+    }
+
+    return game;
+  }
+
   async joinGame(userId: number, joinGameDto: JoinGameDto) {
     const { joinCode, characterId } = joinGameDto;
     const game = await this.prisma.game.findUnique({
