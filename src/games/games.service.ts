@@ -10,10 +10,14 @@ import { randomBytes } from 'crypto';
 import { JoinGameDto } from './dto/join-game.dto';
 import { CreateNoteDto, UpdateHpDto } from './dto/dm-actions.dto';
 import { CreateCharacterDto } from '../characters/dto/create-character.dto';
+import { GameGateway } from './games.gateway';
 
 @Injectable()
 export class GamesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private gameGateway: GameGateway,
+  ) {}
 
   async createGame(masterId: number, createGameDto: CreateGameDto) {
     const joinCode = randomBytes(3).toString('hex').toUpperCase();
@@ -131,12 +135,19 @@ export class GamesService {
     if (!character)
       throw new NotFoundException('El personaje no está en esta partida');
 
-    return this.prisma.character.update({
+    const updatedCharacter = await this.prisma.character.update({
       where: {
         id: characterId,
       },
       data: { current_hp: hpDto.current_hp },
     });
+
+    this.gameGateway.server.to(gameId).emit('hpUpdated', {
+      characterId: characterId,
+      current_hp: hpDto.current_hp,
+    });
+
+    return updatedCharacter;
   }
 
   async createNpc(gameId: string, userId: number, npcDto: CreateCharacterDto) {
