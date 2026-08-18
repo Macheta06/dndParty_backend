@@ -103,6 +103,28 @@ export class GamesService {
     });
   }
 
+  async leaveGame(gameId: string, userId: number) {
+    const character = await this.prisma.character.findFirst({
+      where: {
+        userId: userId,
+        gameId: gameId,
+      },
+    });
+
+    if (!character) {
+      throw new NotFoundException('No tienes ningún personaje en esta partida');
+    }
+
+    const updatedCharacter = await this.prisma.character.update({
+      where: { id: character.id },
+      data: { gameId: null },
+    });
+
+    this.gameGateway.server.to(gameId).emit('playerLeft', character.id);
+
+    return updatedCharacter;
+  }
+
   private async verifyGameMaster(gameId: string, userId: number) {
     const game = await this.prisma.game.findUnique({
       where: { id: gameId },

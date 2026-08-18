@@ -18,11 +18,11 @@ export class GameGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('joinGameRoom')
-  handleJoinRoom(
+  async handleJoinRoom(
     @ConnectedSocket() client: Socket,
     @MessageBody() gameId: string,
   ) {
-    client.join(gameId);
+    await client.join(gameId);
     console.log(`Cliente ${client.id} se unió a la sala ${gameId}`);
   }
 }

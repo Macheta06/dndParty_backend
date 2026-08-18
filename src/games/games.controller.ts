@@ -47,6 +47,14 @@ export class GamesController {
     return this.gameService.joinGame(userId, joinGameDto);
   }
 
+  @Post(':gameId/leave')
+  leaveGame(
+    @Param('gameId') gameId: string,
+    @CurrentUser('sub') userId: number,
+  ) {
+    return this.gameService.leaveGame(gameId, userId);
+  }
+
   @Patch(':gameId/characters/:characterId/hp')
   updateHp(
     @Param('gameId') gameId: string,
