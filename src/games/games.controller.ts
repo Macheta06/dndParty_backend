@@ -14,7 +14,7 @@ import { CreateGameDto } from './dto/create-game.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { JoinGameDto } from './dto/join-game.dto';
 import { CreateNoteDto, UpdateHpDto } from './dto/dm-actions.dto';
-import { CreateCharacterDto } from '../characters/dto/create-character.dto';
+import { CreateNpcDto } from './dto/create-npc.dto';
 
 @Controller('games')
 @UseGuards(AuthGuard)
@@ -35,8 +35,8 @@ export class GamesController {
   }
 
   @Get(':id')
-  getGameByID(@Param('id') id: string) {
-    return this.gameService.getGameById(id);
+  getGameByID(@Param('id') id: string, @CurrentUser('sub') userId: number) {
+    return this.gameService.getGameById(id, userId);
   }
 
   @Post('join')
@@ -73,7 +73,7 @@ export class GamesController {
   @Post(':gameId/npcs')
   createNpc(
     @Param('gameId') gameId: string,
-    @Body() createNpcDto: CreateCharacterDto,
+    @Body() createNpcDto: CreateNpcDto,
     @CurrentUser('sub') userId: number,
   ) {
     return this.gameService.createNpc(gameId, userId, createNpcDto);

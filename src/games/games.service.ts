@@ -4,12 +4,13 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateGameDto } from './dto/create-game.dto';
 import { randomBytes } from 'crypto';
 import { JoinGameDto } from './dto/join-game.dto';
 import { CreateNoteDto, UpdateHpDto } from './dto/dm-actions.dto';
-import { CreateCharacterDto } from '../characters/dto/create-character.dto';
+import { CreateNpcDto } from './dto/create-npc.dto';
 import { GameGateway } from './games.gateway';
 
 @Injectable()
@@ -39,7 +40,7 @@ export class GamesService {
     });
   }
 
-  async getGameById(id: string) {
+  async getGameById(id: string, userId: number) {
     const game = await this.prisma.game.findUnique({
       where: { id },
       include: {
@@ -52,7 +53,14 @@ export class GamesService {
       throw new NotFoundException('Partida no encontrada');
     }
 
-    return game;
+    const { characters, notes, ...rest } = game;
+
+    return {
+      ...rest,
+      characters: characters.filter((character) => !character.is_npc),
+      npcs: characters.filter((character) => character.is_npc),
+      notes: game.masterId === userId ? notes : undefined,
+    };
   }
 
   async joinGame(userId: number, joinGameDto: JoinGameDto) {
@@ -172,25 +180,57 @@ export class GamesService {
     return updatedCharacter;
   }
 
-  async createNpc(gameId: string, userId: number, npcDto: CreateCharacterDto) {
+  async createNpc(gameId: string, userId: number, npcDto: CreateNpcDto) {
     await this.verifyGameMaster(gameId, userId);
 
-    return this.prisma.character.create({
-      data: {
-        ...npcDto,
-        userId,
-        gameId,
-        is_npc: true,
-        level: npcDto.level ?? 1,
-        exp: 0,
-        proficiency: npcDto.proficiency ?? 2,
-        inspiration: 0,
-        temporary_hp: 0,
-        equipment: npcDto.equipment ?? [],
-        spells: npcDto.spells ?? [],
-        proficiencies: npcDto.proficiencies ?? [],
-      },
-    });
+    const npcDefaults: Prisma.CharacterUncheckedCreateInput = {
+      name: npcDto.name,
+      class: npcDto.class ?? 'Enemigo',
+      race: npcDto.race ?? 'Desconocido',
+      background: 'NPC',
+      alignment: 'Neutral',
+      level: 1,
+      exp: 0,
+      proficiency: 2,
+      inspiration: 0,
+      strength: 10,
+      dexterity: 10,
+      constitution: 10,
+      intelligence: 10,
+      wisdom: 10,
+      charisma: 10,
+      armor: 10,
+      initiative: 0,
+      speed: 30,
+      max_hp: npcDto.max_hp,
+      current_hp: npcDto.current_hp,
+      temporary_hp: 0,
+      hitDice: '1d8',
+      equipment: [],
+      proficiencies: [],
+      spells: [],
+      is_npc: true,
+      userId,
+      gameId,
+    };
+
+    try {
+      const createdNpc = await this.prisma.character.create({
+        data: npcDefaults,
+      });
+
+      this.gameGateway.server.to(gameId).emit('npcCreated', createdNpc);
+
+      return createdNpc;
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Ya existe un personaje con ese nombre');
+      }
+      throw error;
+    }
   }
 
   async createNote(gameId: string, userId: number, noteDto: CreateNoteDto) {
