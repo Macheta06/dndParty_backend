@@ -63,6 +63,7 @@ function characterFixture(overrides: Partial<Character> = {}): Character {
     allies: null,
     userId: 2,
     gameId: null,
+    deleted: false,
     ...overrides,
   };
 }
@@ -98,6 +99,7 @@ const gameFixture: Game = {
   id: 'game-1',
   name: 'La Cueva del Dragón',
   joinCode: 'ABC123',
+  initiative: null,
   masterId: 1,
 };
 

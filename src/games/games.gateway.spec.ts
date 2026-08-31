@@ -5,6 +5,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GamesService } from './games.service';
 import { WsJwtPayload } from '../auth/guard/ws-jwt/ws-jwt.guard';
 
+interface MockSocketOverrides {
+  token?: string;
+  headers?: Record<string, unknown>;
+}
+
 interface MockSocket {
   id: string;
   handshake: {
@@ -17,14 +22,14 @@ interface MockSocket {
   disconnect: jest.Mock;
 }
 
-function createMockSocket(
-  overrides: Partial<Record<string, unknown>> = {},
-): MockSocket {
+function createMockSocket(overrides: MockSocketOverrides = {}): MockSocket {
+  const headers: Record<string, unknown> = overrides.headers ?? {};
+
   return {
     id: 'test-socket-id',
     handshake: {
       auth: { token: overrides['token'] ?? undefined },
-      headers: overrides['headers'] ?? {},
+      headers,
     },
     data: {},
     join: jest.fn().mockResolvedValue(undefined),
