@@ -86,6 +86,8 @@ model Character {
   story          String?
   allies         String?
 
+  deleted Boolean? @default(false)
+
   // Relaciones
   userId Int
   user   User    @relation(fields: [userId], references: [id])

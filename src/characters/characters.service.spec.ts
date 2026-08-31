@@ -1,12 +1,57 @@
 import { Test } from '@nestjs/testing';
+import {
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
+} from '@nestjs/common';
 import { CharactersService } from './characters.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCharacterDto } from './dto/create-character.dto';
+import { UpdateCharacterDto } from './dto/update-character.dto';
+
+const mockCharacter = {
+  id: 1,
+  name: 'Aria',
+  class: 'Rogue',
+  race: 'Half-Elf',
+  level: 1,
+  alignment: 'Chaotic Good',
+  background: 'Urchin',
+  exp: 0,
+  proficiency: 2,
+  inspiration: 0,
+  strength: 10,
+  dexterity: 14,
+  constitution: 12,
+  intelligence: 10,
+  wisdom: 12,
+  charisma: 10,
+  armor: 13,
+  initiative: 2,
+  speed: 30,
+  max_hp: 30,
+  current_hp: 30,
+  temporary_hp: 0,
+  hitDice: '1d8',
+  gold_coins: 0,
+  silver_coins: 0,
+  copper_coins: 0,
+  equipment: [],
+  spells: [],
+  proficiencies: [],
+  userId: 7,
+  is_npc: false,
+  gameId: null as string | null,
+  deleted: false,
+  game: null,
+};
 
 const mockPrisma = {
   character: {
     create: jest.fn(),
     findMany: jest.fn(),
+    findUnique: jest.fn(),
+    update: jest.fn(),
   },
 };
 
@@ -45,20 +90,7 @@ describe('CharactersService', () => {
         current_hp: 30,
         hitDice: '1d8',
       };
-      const created = {
-        id: 1,
-        name: 'Aria',
-        userId: 7,
-        level: 1,
-        exp: 0,
-        proficiency: 2,
-        inspiration: 0,
-        temporary_hp: 0,
-        is_npc: false,
-        equipment: [],
-        spells: [],
-        proficiencies: [],
-      };
+      const created = { ...mockCharacter, userId: 7 };
       mockPrisma.character.create.mockResolvedValue(created);
 
       const result = await service.create(7, dto);
@@ -127,7 +159,7 @@ describe('CharactersService', () => {
   });
 
   describe('getMyCharacters', () => {
-    it('returns only the non-npc characters of the user', async () => {
+    it('returns only the non-npc, non-deleted characters of the user', async () => {
       const characters = [
         { id: 1, name: 'Aria', is_npc: false },
         { id: 2, name: 'Luna', is_npc: false },
@@ -138,11 +170,166 @@ describe('CharactersService', () => {
 
       expect(result).toEqual(characters);
       expect(mockPrisma.character.findMany).toHaveBeenCalledWith({
-        where: { userId: 7, is_npc: false },
+        where: { userId: 7, is_npc: false, deleted: { not: true } },
         include: {
           game: { select: { id: true, name: true } },
         },
       });
+    });
+  });
+
+  describe('getById', () => {
+    it('returns the character when owned by the user', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+
+      const result = await service.getById(1, 7);
+
+      expect(result).toEqual(mockCharacter);
+      expect(mockPrisma.character.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+        include: { game: { select: { id: true, name: true } } },
+      });
+    });
+
+    it('throws NotFoundException when character does not exist', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(null);
+
+      await expect(service.getById(999, 7)).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when character is deleted', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        deleted: true,
+      });
+
+      await expect(service.getById(1, 7)).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws ForbiddenException when user does not own the character', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        userId: 99,
+      });
+
+      await expect(service.getById(1, 7)).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('update', () => {
+    it('updates character fields when owned by the user', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+      const updated = { ...mockCharacter, name: 'Aria Shadowblade' };
+      mockPrisma.character.update.mockResolvedValue(updated);
+
+      const dto: UpdateCharacterDto = { name: 'Aria Shadowblade' };
+      const result = await service.update(1, 7, dto);
+
+      expect(result).toEqual(updated);
+      expect(mockPrisma.character.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { name: 'Aria Shadowblade' },
+      });
+    });
+
+    it('throws ForbiddenException when user does not own the character', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        userId: 99,
+      });
+
+      const dto: UpdateCharacterDto = { name: 'Hacked' };
+      await expect(service.update(1, 7, dto)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('throws ConflictException when character is in a game', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        gameId: 'some-game-id',
+      });
+
+      const dto: UpdateCharacterDto = { name: 'Cheater' };
+      await expect(service.update(1, 7, dto)).rejects.toThrow(
+        ConflictException,
+      );
+    });
+
+    it('throws NotFoundException when character is deleted', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        deleted: true,
+      });
+
+      const dto: UpdateCharacterDto = { name: 'Ghost' };
+      await expect(service.update(1, 7, dto)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws NotFoundException when character does not exist', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(null);
+
+      const dto: UpdateCharacterDto = { name: 'Nobody' };
+      await expect(service.update(999, 7, dto)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('softDelete', () => {
+    it('sets deleted to true when character is owned and not in a game', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+      mockPrisma.character.update.mockResolvedValue({
+        ...mockCharacter,
+        deleted: true,
+      });
+
+      const result = await service.softDelete(1, 7);
+
+      expect(result.deleted).toBe(true);
+      expect(mockPrisma.character.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { deleted: true },
+      });
+    });
+
+    it('throws ConflictException when character is in a game', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        gameId: 'some-game-id',
+      });
+
+      await expect(service.softDelete(1, 7)).rejects.toThrow(ConflictException);
+    });
+
+    it('throws ForbiddenException when user does not own the character', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        userId: 99,
+      });
+
+      await expect(service.softDelete(1, 7)).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('throws NotFoundException when character is already deleted', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        deleted: true,
+      });
+
+      await expect(service.softDelete(1, 7)).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFoundException when character does not exist', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(null);
+
+      await expect(service.softDelete(999, 7)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });
