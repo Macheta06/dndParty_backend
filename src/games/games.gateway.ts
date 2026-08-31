@@ -11,6 +11,9 @@ import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service';
 import { WsJwtPayload } from '../auth/guard/ws-jwt/ws-jwt.guard';
+import { GamesService } from './games.service';
+import { RollDiceDto } from './dto/initiative.dto';
+import { Inject, forwardRef } from '@nestjs/common';
 
 interface SocketData {
   user?: WsJwtPayload;
@@ -28,6 +31,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => GamesService))
+    private readonly gamesService: GamesService,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -90,6 +95,111 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     await client.join(gameId);
     console.log(`Cliente ${client.id} se unió a la sala ${gameId}`);
+  }
+
+  @SubscribeMessage('setInitiative')
+  async handleSetInitiative(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: {
+      gameId: string;
+      entries: Array<{ type: string; id: number; name: string; score: number }>;
+    },
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      const entries = data.entries.map((e) => ({
+        ...e,
+        type: e.type as 'character' | 'npc',
+      }));
+      await this.gamesService.setInitiative(data.gameId, socketData.user.sub, {
+        entries,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al establecer iniciativa';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('advanceTurn')
+  async handleAdvanceTurn(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { gameId: string },
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      await this.gamesService.advanceTurn(data.gameId, socketData.user.sub);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al avanzar turno';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('clearInitiative')
+  async handleClearInitiative(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { gameId: string },
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      await this.gamesService.clearInitiative(data.gameId, socketData.user.sub);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al limpiar iniciativa';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('rollDice')
+  handleRollDice(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: RollDiceDto,
+  ): void {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      const result = this.gamesService.rollDice(
+        socketData.user.sub,
+        socketData.user.email,
+        data.formula,
+      );
+      const roomId = this.extractGameId(client);
+      if (roomId) {
+        this.server.to(roomId).emit('diceRolled', result);
+      } else {
+        client.emit('diceRolled', result);
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al tirar dados';
+      client.emit('error', { message });
+    }
+  }
+
+  private extractGameId(client: Socket): string | undefined {
+    const rooms = Array.from(client.rooms);
+    return rooms.find((r) => r !== client.id);
   }
 
   private extractToken(client: Socket): string | undefined {

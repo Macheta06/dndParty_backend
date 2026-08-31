@@ -22,6 +22,7 @@ model Game {
   id       String @id @default(uuid())
   name     String
   joinCode String @unique
+  initiative Json?
 
   // Relaciones
   masterId        Int

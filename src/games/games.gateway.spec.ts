@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { GameGateway } from './games.gateway';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
+import { GamesService } from './games.service';
 import { WsJwtPayload } from '../auth/guard/ws-jwt/ws-jwt.guard';
 
 interface MockSocket {
@@ -68,6 +69,15 @@ describe('GameGateway', () => {
         GameGateway,
         { provide: JwtService, useValue: jwtService },
         { provide: PrismaService, useValue: prisma },
+        {
+          provide: GamesService,
+          useValue: {
+            setInitiative: jest.fn(),
+            advanceTurn: jest.fn(),
+            clearInitiative: jest.fn(),
+            rollDice: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

@@ -3,6 +3,9 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,11 +15,34 @@ import { JoinGameDto } from './dto/join-game.dto';
 import { CreateNoteDto, UpdateHpDto } from './dto/dm-actions.dto';
 import { CreateNpcDto } from './dto/create-npc.dto';
 import { GameGateway } from './games.gateway';
+import { SetInitiativeDto } from './dto/initiative.dto';
+
+export interface InitiativeEntry {
+  type: 'character' | 'npc';
+  id: number;
+  name: string;
+  score: number;
+}
+
+export interface InitiativeState {
+  entries: InitiativeEntry[];
+  currentTurn: number;
+  round: number;
+}
+
+interface DiceRollResult {
+  userId: number;
+  userName: string;
+  formula: string;
+  rolls: number[];
+  total: number;
+}
 
 @Injectable()
 export class GamesService {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => GameGateway))
     private gameGateway: GameGateway,
   ) {}
 
@@ -242,5 +268,101 @@ export class GamesService {
         gameId,
       },
     });
+  }
+
+  async setInitiative(
+    gameId: string,
+    userId: number,
+    dto: SetInitiativeDto,
+  ): Promise<InitiativeState> {
+    await this.verifyGameMaster(gameId, userId);
+
+    const sorted = [...dto.entries].sort((a, b) => b.score - a.score);
+    const state: InitiativeState = {
+      entries: sorted,
+      currentTurn: 0,
+      round: 1,
+    };
+
+    await this.prisma.game.update({
+      where: { id: gameId },
+      data: { initiative: state as unknown as Prisma.InputJsonValue },
+    });
+
+    this.gameGateway.server.to(gameId).emit('initiativeUpdated', state);
+    return state;
+  }
+
+  async advanceTurn(gameId: string, userId: number): Promise<InitiativeState> {
+    await this.verifyGameMaster(gameId, userId);
+
+    const game = await this.prisma.game.findUnique({ where: { id: gameId } });
+    if (!game) throw new NotFoundException('Partida no encontrada');
+
+    const state = game.initiative as unknown as InitiativeState | null;
+    if (!state || state.entries.length === 0) {
+      throw new BadRequestException('No hay iniciativa activa');
+    }
+
+    const nextTurn = state.currentTurn + 1;
+    if (nextTurn >= state.entries.length) {
+      state.currentTurn = 0;
+      state.round += 1;
+    } else {
+      state.currentTurn = nextTurn;
+    }
+
+    await this.prisma.game.update({
+      where: { id: gameId },
+      data: { initiative: state as unknown as Prisma.InputJsonValue },
+    });
+
+    this.gameGateway.server.to(gameId).emit('turnAdvanced', state);
+    return state;
+  }
+
+  async clearInitiative(gameId: string, userId: number): Promise<void> {
+    await this.verifyGameMaster(gameId, userId);
+
+    await this.prisma.game.update({
+      where: { id: gameId },
+      data: { initiative: Prisma.DbNull },
+    });
+
+    this.gameGateway.server.to(gameId).emit('initiativeCleared');
+  }
+
+  rollDice(userId: number, userName: string, formula: string): DiceRollResult {
+    const match = formula.match(/^(\d*)d(\d+)([+-]\d+)?$/i);
+    if (!match) {
+      throw new BadRequestException(`Fórmula inválida: ${formula}`);
+    }
+
+    const count = match[1] === '' ? 1 : parseInt(match[1], 10);
+    const sides = parseInt(match[2], 10);
+    const modifier = match[3] ? parseInt(match[3], 10) : 0;
+
+    if (count < 1 || count > 100) {
+      throw new BadRequestException('Cantidad de dados inválida (1-100)');
+    }
+    if (sides < 1 || sides > 1000) {
+      throw new BadRequestException('Número de caras inválido (1-1000)');
+    }
+
+    const rolls: number[] = [];
+    let sum = 0;
+    for (let i = 0; i < count; i++) {
+      const roll = Math.floor(Math.random() * sides) + 1;
+      rolls.push(roll);
+      sum += roll;
+    }
+
+    return {
+      userId,
+      userName,
+      formula,
+      rolls,
+      total: sum + modifier,
+    };
   }
 }
