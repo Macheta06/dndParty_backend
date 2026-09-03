@@ -92,6 +92,7 @@ const noteFixture: Note = {
   id: 1,
   title: 'Secreto',
   description: 'Tesoro detrás de la puerta',
+  is_public: false,
   gameId: 'game-1',
 };
 
@@ -176,12 +177,12 @@ describe('GamesService', () => {
       });
     });
 
-    it('omits notes when the caller is not the master', async () => {
+    it('filters notes to public only when the caller is not the master', async () => {
       mockPrisma.game.findUnique.mockResolvedValue(gameWithRelations);
 
       const result = await service.getGameById('game-1', 2);
 
-      expect(result.notes).toBeUndefined();
+      expect(result.notes).toEqual([]);
       expect(result.characters).toEqual([playerFixture]);
     });
 

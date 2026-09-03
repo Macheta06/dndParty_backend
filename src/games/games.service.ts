@@ -16,6 +16,9 @@ import { CreateNoteDto, UpdateHpDto } from './dto/dm-actions.dto';
 import { CreateNpcDto } from './dto/create-npc.dto';
 import { GameGateway } from './games.gateway';
 import { SetInitiativeDto } from './dto/initiative.dto';
+import { GrantXpDto } from './dto/grant-xp.dto';
+import { CreateChatMessageDto } from './dto/chat.dto';
+import { AddEquipmentDto, RemoveEquipmentDto } from './dto/equipment.dto';
 
 export interface InitiativeEntry {
   type: 'character' | 'npc';
@@ -85,7 +88,10 @@ export class GamesService {
       ...rest,
       characters: characters.filter((character) => !character.is_npc),
       npcs: characters.filter((character) => character.is_npc),
-      notes: game.masterId === userId ? notes : undefined,
+      notes:
+        game.masterId === userId
+          ? notes
+          : notes.filter((note) => note.is_public),
     };
   }
 
@@ -262,12 +268,16 @@ export class GamesService {
   async createNote(gameId: string, userId: number, noteDto: CreateNoteDto) {
     await this.verifyGameMaster(gameId, userId);
 
-    return this.prisma.note.create({
+    const note = await this.prisma.note.create({
       data: {
         ...noteDto,
         gameId,
       },
     });
+
+    this.gameGateway.server.to(gameId).emit('noteCreated', note);
+
+    return note;
   }
 
   async setInitiative(
@@ -364,5 +374,208 @@ export class GamesService {
       rolls,
       total: sum + modifier,
     };
+  }
+
+  async grantXp(gameId: string, userId: number, dto: GrantXpDto) {
+    await this.verifyGameMaster(gameId, userId);
+
+    if (dto.characterId) {
+      const character = await this.prisma.character.findFirst({
+        where: { id: dto.characterId, gameId, is_npc: false },
+      });
+      if (!character) {
+        throw new NotFoundException('Personaje no encontrado en esta partida');
+      }
+
+      const updated = await this.prisma.character.update({
+        where: { id: dto.characterId },
+        data: { exp: { increment: dto.xp } },
+      });
+
+      this.gameGateway.server.to(gameId).emit('xpGranted', {
+        characterId: dto.characterId,
+        exp: updated.exp,
+      });
+
+      return updated;
+    }
+
+    const characters = await this.prisma.character.findMany({
+      where: { gameId, is_npc: false },
+    });
+
+    const updatedCharacters = await Promise.all(
+      characters.map((c) =>
+        this.prisma.character.update({
+          where: { id: c.id },
+          data: { exp: { increment: dto.xp } },
+        }),
+      ),
+    );
+
+    this.gameGateway.server.to(gameId).emit('xpGrantedBulk', {
+      xp: dto.xp,
+      characters: updatedCharacters.map((c) => ({ id: c.id, exp: c.exp })),
+    });
+
+    return updatedCharacters;
+  }
+
+  async getChatMessages(gameId: string, userId: number) {
+    await this.verifyGameAccess(gameId, userId);
+
+    return this.prisma.chatMessage.findMany({
+      where: { gameId },
+      include: { sender: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+    });
+  }
+
+  async sendChatMessage(
+    gameId: string,
+    userId: number,
+    dto: CreateChatMessageDto,
+  ) {
+    await this.verifyGameAccess(gameId, userId);
+
+    const message = await this.prisma.chatMessage.create({
+      data: {
+        content: dto.content,
+        gameId,
+        senderId: userId,
+      },
+      include: { sender: { select: { id: true, name: true } } },
+    });
+
+    this.gameGateway.server.to(gameId).emit('chatMessage', message);
+
+    return message;
+  }
+
+  async addEquipment(
+    gameId: string,
+    characterId: number,
+    userId: number,
+    dto: AddEquipmentDto,
+  ) {
+    await this.verifyGameAccess(gameId, userId);
+
+    const character = await this.prisma.character.findFirst({
+      where: { id: characterId, gameId },
+    });
+    if (!character) {
+      throw new NotFoundException('Personaje no encontrado en esta partida');
+    }
+
+    const equipment = (character.equipment as Array<{
+      name: string;
+      quantity: number;
+      description?: string;
+    }>) ?? [];
+
+    const existing = equipment.find(
+      (item) => item.name.toLowerCase() === dto.name.toLowerCase(),
+    );
+
+    let updatedEquipment;
+    if (existing) {
+      updatedEquipment = equipment.map((item) =>
+        item.name.toLowerCase() === dto.name.toLowerCase()
+          ? { ...item, quantity: item.quantity + dto.quantity }
+          : item,
+      );
+    } else {
+      updatedEquipment = [...equipment, { name: dto.name, quantity: dto.quantity, description: dto.description }];
+    }
+
+    const updated = await this.prisma.character.update({
+      where: { id: characterId },
+      data: { equipment: updatedEquipment as unknown as Prisma.InputJsonValue },
+    });
+
+    this.gameGateway.server.to(gameId).emit('equipmentUpdated', {
+      characterId,
+      equipment: updated.equipment,
+    });
+
+    return updated;
+  }
+
+  async removeEquipment(
+    gameId: string,
+    characterId: number,
+    userId: number,
+    dto: RemoveEquipmentDto,
+  ) {
+    await this.verifyGameAccess(gameId, userId);
+
+    const character = await this.prisma.character.findFirst({
+      where: { id: characterId, gameId },
+    });
+    if (!character) {
+      throw new NotFoundException('Personaje no encontrado en esta partida');
+    }
+
+    const equipment = (character.equipment as Array<{
+      name: string;
+      quantity: number;
+      description?: string;
+    }>) ?? [];
+
+    const existing = equipment.find(
+      (item) => item.name.toLowerCase() === dto.name.toLowerCase(),
+    );
+    if (!existing) {
+      throw new NotFoundException('No tenés ese objeto en el inventario');
+    }
+
+    const newQuantity = existing.quantity - dto.quantity;
+    let updatedEquipment;
+    if (newQuantity <= 0) {
+      updatedEquipment = equipment.filter(
+        (item) => item.name.toLowerCase() !== dto.name.toLowerCase(),
+      );
+    } else {
+      updatedEquipment = equipment.map((item) =>
+        item.name.toLowerCase() === dto.name.toLowerCase()
+          ? { ...item, quantity: newQuantity }
+          : item,
+      );
+    }
+
+    const updated = await this.prisma.character.update({
+      where: { id: characterId },
+      data: { equipment: updatedEquipment as unknown as Prisma.InputJsonValue },
+    });
+
+    this.gameGateway.server.to(gameId).emit('equipmentUpdated', {
+      characterId,
+      equipment: updated.equipment,
+    });
+
+    return updated;
+  }
+
+  private async verifyGameAccess(gameId: string, userId: number) {
+    const game = await this.prisma.game.findUnique({
+      where: { id: gameId },
+    });
+
+    if (!game) {
+      throw new NotFoundException('Partida no encontrada');
+    }
+
+    const isMaster = game.masterId === userId;
+    if (!isMaster) {
+      const character = await this.prisma.character.findFirst({
+        where: { gameId, userId, is_npc: false },
+      });
+      if (!character) {
+        throw new ForbiddenException('No tienes acceso a esta partida');
+      }
+    }
+
+    return game;
   }
 }

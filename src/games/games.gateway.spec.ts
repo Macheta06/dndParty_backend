@@ -19,6 +19,7 @@ interface MockSocket {
   data: Record<string, unknown>;
   join: jest.Mock;
   emit: jest.Mock;
+  to: jest.Mock;
   disconnect: jest.Mock;
 }
 
@@ -34,6 +35,7 @@ function createMockSocket(overrides: MockSocketOverrides = {}): MockSocket {
     data: {},
     join: jest.fn().mockResolvedValue(undefined),
     emit: jest.fn(),
+    to: jest.fn().mockReturnThis(),
     disconnect: jest.fn(),
   };
 }
@@ -87,6 +89,10 @@ describe('GameGateway', () => {
     }).compile();
 
     gateway = module.get(GameGateway);
+    gateway.server = {
+      to: jest.fn().mockReturnThis(),
+      emit: jest.fn(),
+    } as never;
   });
 
   describe('handleConnection', () => {
@@ -154,7 +160,7 @@ describe('GameGateway', () => {
       await gateway.handleJoinRoom(client as never, 'game-1');
 
       expect(client.join).toHaveBeenCalledWith('game-1');
-      expect(client.emit).not.toHaveBeenCalled();
+      expect(client.emit).toHaveBeenCalledWith('roomUsers', [1]);
     });
 
     it('permite unirse si el usuario tiene un personaje en la sala', async () => {
@@ -166,7 +172,7 @@ describe('GameGateway', () => {
       await gateway.handleJoinRoom(client as never, 'game-1');
 
       expect(client.join).toHaveBeenCalledWith('game-1');
-      expect(client.emit).not.toHaveBeenCalled();
+      expect(client.emit).toHaveBeenCalledWith('roomUsers', [2]);
     });
   });
 });

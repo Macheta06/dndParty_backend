@@ -1,4 +1,10 @@
-import { IsInt, IsNotEmpty, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class UpdateHpDto {
   @IsInt()
@@ -13,4 +19,8 @@ export class CreateNoteDto {
   @IsString()
   @IsNotEmpty()
   description!: string;
+
+  @IsBoolean()
+  @IsOptional()
+  is_public?: boolean;
 }

@@ -87,4 +87,12 @@ export class GamesController {
   ) {
     return this.gameService.createNote(gameId, userId, createNoteDto);
   }
+
+  @Get(':gameId/chat')
+  getChatMessages(
+    @Param('gameId') gameId: string,
+    @CurrentUser('sub') userId: number,
+  ) {
+    return this.gameService.getChatMessages(gameId, userId);
+  }
 }

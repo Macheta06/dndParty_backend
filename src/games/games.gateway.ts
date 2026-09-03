@@ -13,6 +13,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WsJwtPayload } from '../auth/guard/ws-jwt/ws-jwt.guard';
 import { GamesService } from './games.service';
 import { RollDiceDto } from './dto/initiative.dto';
+import { GrantXpDto } from './dto/grant-xp.dto';
+import { CreateChatMessageDto } from './dto/chat.dto';
+import { AddEquipmentDto, RemoveEquipmentDto } from './dto/equipment.dto';
 import { Inject, forwardRef } from '@nestjs/common';
 
 interface SocketData {
@@ -27,6 +30,9 @@ function getSocketData(client: Socket): SocketData {
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
+
+  /** Map<gameId, Set<userId>> — usuarios conectados por sala */
+  private roomUsers = new Map<string, Set<number>>();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -60,6 +66,26 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log(
       `Cliente desconectado: ${client.id}${data.user ? ` (user: ${data.user.sub})` : ''}`,
     );
+
+    if (data.user) {
+      const rooms = Array.from(client.rooms);
+      for (const roomId of rooms) {
+        if (roomId !== client.id) {
+          // Remove from tracked users
+          const users = this.roomUsers.get(roomId);
+          if (users) {
+            users.delete(data.user.sub);
+            if (users.size === 0) {
+              this.roomUsers.delete(roomId);
+            }
+          }
+
+          this.server.to(roomId).emit('playerOffline', {
+            userId: data.user.sub,
+          });
+        }
+      }
+    }
   }
 
   @SubscribeMessage('joinGameRoom')
@@ -95,6 +121,20 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     await client.join(gameId);
     console.log(`Cliente ${client.id} se unió a la sala ${gameId}`);
+
+    // Track user in room
+    let users = this.roomUsers.get(gameId);
+    if (!users) {
+      users = new Set();
+      this.roomUsers.set(gameId, users);
+    }
+    users.add(data.user.sub);
+
+    // Send full list of connected users to the new joiner
+    client.emit('roomUsers', Array.from(users));
+
+    // Notify others
+    client.to(gameId).emit('playerOnline', { userId: data.user.sub });
   }
 
   @SubscribeMessage('setInitiative')
@@ -193,6 +233,105 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Error al tirar dados';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('grantXp')
+  async handleGrantXp(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: GrantXpDto & { gameId: string },
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      await this.gamesService.grantXp(data.gameId, socketData.user.sub, {
+        xp: data.xp,
+        characterId: data.characterId,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al otorgar XP';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('chatMessage')
+  async handleChatMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: CreateChatMessageDto & { gameId: string },
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      await this.gamesService.sendChatMessage(
+        data.gameId,
+        socketData.user.sub,
+        { content: data.content },
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al enviar mensaje';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('addEquipment')
+  async handleAddEquipment(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: AddEquipmentDto & { gameId: string; characterId: number },
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      await this.gamesService.addEquipment(
+        data.gameId,
+        data.characterId,
+        socketData.user.sub,
+        { name: data.name, quantity: data.quantity, description: data.description },
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al agregar objeto';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('removeEquipment')
+  async handleRemoveEquipment(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: RemoveEquipmentDto & { gameId: string; characterId: number },
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      await this.gamesService.removeEquipment(
+        data.gameId,
+        data.characterId,
+        socketData.user.sub,
+        { name: data.name, quantity: data.quantity },
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al quitar objeto';
       client.emit('error', { message });
     }
   }
