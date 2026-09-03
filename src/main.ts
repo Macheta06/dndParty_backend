@@ -6,8 +6,18 @@ import { PrismaClientExceptionFilter } from './filters/PrismaClientExceptionFilt
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3001')
+    .split(',')
+    .map((o) => o.trim().replace(/\/+$/, ''));
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+    origin: (origin, callback) => {
+      const normalized = (origin || '').replace(/\/+$/, '');
+      if (!origin || allowedOrigins.includes(normalized)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

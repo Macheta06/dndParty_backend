@@ -26,9 +26,24 @@ function getSocketData(client: Socket): SocketData {
   return client.data as SocketData;
 }
 
+function normalizeOrigin(origin: string): string {
+  return origin.replace(/\/+$/, '');
+}
+
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3001')
+  .split(',')
+  .map((o) => normalizeOrigin(o.trim()));
+
 @WebSocketGateway({
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      const normalized = normalizeOrigin(origin || '');
+      if (!origin || allowedOrigins.includes(normalized)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   },
 })
