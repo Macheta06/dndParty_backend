@@ -26,7 +26,12 @@ function getSocketData(client: Socket): SocketData {
   return client.data as SocketData;
 }
 
-@WebSocketGateway({ cors: { origin: 'http://localhost:3001' } })
+@WebSocketGateway({
+  cors: {
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
+    credentials: true,
+  },
+})
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
