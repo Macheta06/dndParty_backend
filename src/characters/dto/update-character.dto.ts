@@ -7,7 +7,9 @@ import {
   IsOptional,
   IsArray,
   IsNumber,
+  IsIn,
 } from 'class-validator';
+import { ALLOWED_CLASSES, ALLOWED_RACES, ALLOWED_BACKGROUNDS } from '../constants/dnd-options';
 
 export class UpdateCharacterDto {
   @IsOptional()
@@ -18,6 +20,7 @@ export class UpdateCharacterDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  @IsIn(ALLOWED_CLASSES, { message: 'Clase no válida' })
   class?: string;
 
   @IsOptional()
@@ -28,6 +31,7 @@ export class UpdateCharacterDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  @IsIn(ALLOWED_RACES, { message: 'Raza no válida' })
   race?: string;
 
   @IsOptional()
@@ -43,6 +47,7 @@ export class UpdateCharacterDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  @IsIn(ALLOWED_BACKGROUNDS, { message: 'Trasfondo no válido' })
   background?: string;
 
   @IsOptional()

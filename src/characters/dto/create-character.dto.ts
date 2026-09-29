@@ -6,7 +6,9 @@ import {
   Max,
   IsOptional,
   IsArray,
+  IsIn,
 } from 'class-validator';
+import { ALLOWED_CLASSES, ALLOWED_RACES, ALLOWED_BACKGROUNDS } from '../constants/dnd-options';
 
 export class CreateCharacterDto {
   @IsString()
@@ -15,6 +17,7 @@ export class CreateCharacterDto {
 
   @IsString()
   @IsNotEmpty()
+  @IsIn(ALLOWED_CLASSES, { message: 'Clase no válida' })
   class!: string;
 
   @IsOptional()
@@ -24,6 +27,7 @@ export class CreateCharacterDto {
 
   @IsString()
   @IsNotEmpty()
+  @IsIn(ALLOWED_RACES, { message: 'Raza no válida' })
   race!: string;
 
   @IsString()
@@ -37,6 +41,7 @@ export class CreateCharacterDto {
 
   @IsString()
   @IsNotEmpty()
+  @IsIn(ALLOWED_BACKGROUNDS, { message: 'Trasfondo no válido' })
   background!: string;
 
   // --- Atributos base ---
