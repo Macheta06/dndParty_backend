@@ -74,4 +74,22 @@ export class CreateCharacterDto {
   @IsArray()
   @IsOptional()
   proficiencies?: string[]; // Ej: ["Acrobatics", "Stealth"]
+
+  @IsOptional()
+  feature_traits?: any;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  gold_coins?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  silver_coins?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  copper_coins?: number;
 }

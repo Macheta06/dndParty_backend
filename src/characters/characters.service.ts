@@ -24,9 +24,11 @@ export class CharactersService {
         inspiration: 0,
         temporary_hp: 0,
         is_npc: false,
+        gold_coins: createCharacterDto.gold_coins ?? 0,
         equipment: createCharacterDto.equipment ?? [],
         spells: createCharacterDto.spells ?? [],
         proficiencies: createCharacterDto.proficiencies ?? [],
+        feature_traits: createCharacterDto.feature_traits ?? [],
       },
     });
   }
@@ -142,6 +144,24 @@ export class CharactersService {
     return this.prisma.character.update({
       where: { id },
       data: { deleted: true },
+    });
+  }
+
+  async hardDelete(id: number, userId: number) {
+    const character = await this.prisma.character.findUnique({
+      where: { id },
+    });
+
+    if (!character) {
+      throw new NotFoundException(`Character with id ${id} not found`);
+    }
+
+    if (character.userId !== userId) {
+      throw new ForbiddenException('You do not own this character');
+    }
+
+    return this.prisma.character.delete({
+      where: { id },
     });
   }
 }

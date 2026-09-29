@@ -57,4 +57,12 @@ export class CharactersController {
   ) {
     return this.characterService.softDelete(id, userId);
   }
+
+  @Delete(':id/permanent')
+  hardDeleteCharacter(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser('sub') userId: number,
+  ) {
+    return this.characterService.hardDelete(id, userId);
+  }
 }
