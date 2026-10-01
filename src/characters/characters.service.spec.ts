@@ -188,8 +188,21 @@ describe('CharactersService', () => {
       expect(result).toEqual(mockCharacter);
       expect(mockPrisma.character.findUnique).toHaveBeenCalledWith({
         where: { id: 1 },
-        include: { game: { select: { id: true, name: true } } },
+        include: { game: { select: { id: true, name: true, masterId: true } } },
       });
+    });
+
+    it('returns the character when user is the Dungeon Master of the game', async () => {
+      const gameCharacter = {
+        ...mockCharacter,
+        userId: 99,
+        game: { id: 'game-1', name: 'Partida Test', masterId: 7 },
+      };
+      mockPrisma.character.findUnique.mockResolvedValue(gameCharacter);
+
+      const result = await service.getById(1, 7);
+
+      expect(result).toEqual(gameCharacter);
     });
 
     it('throws NotFoundException when character does not exist', async () => {

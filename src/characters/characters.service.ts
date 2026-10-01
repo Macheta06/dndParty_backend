@@ -53,7 +53,7 @@ export class CharactersService {
       where: { id },
       include: {
         game: {
-          select: { id: true, name: true },
+          select: { id: true, name: true, masterId: true },
         },
       },
     });
@@ -67,6 +67,9 @@ export class CharactersService {
     }
 
     if (character.userId !== userId) {
+      if (character.game && character.game.masterId === userId) {
+        return character;
+      }
       throw new ForbiddenException('You do not own this character');
     }
 
