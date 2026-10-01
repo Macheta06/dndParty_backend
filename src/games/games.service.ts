@@ -126,12 +126,10 @@ export class GamesService {
       );
     }
 
-    return this.prisma.character.update({
+    const updatedCharacter = await this.prisma.character.update({
       where: { id: characterId },
       data: { gameId: game.id },
-      select: {
-        id: true,
-        name: true,
+      include: {
         game: {
           select: {
             id: true,
@@ -141,6 +139,14 @@ export class GamesService {
         },
       },
     });
+
+    this.gameGateway.server.to(game.id).emit('characterJoined', updatedCharacter);
+
+    return {
+      id: updatedCharacter.id,
+      name: updatedCharacter.name,
+      game: updatedCharacter.game,
+    };
   }
 
   async leaveGame(gameId: string, userId: number) {

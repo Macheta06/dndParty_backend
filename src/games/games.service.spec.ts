@@ -343,9 +343,7 @@ describe('GamesService', () => {
       expect(mockPrisma.character.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: { gameId: 'game-1' },
-        select: {
-          id: true,
-          name: true,
+        include: {
           game: {
             select: {
               id: true,

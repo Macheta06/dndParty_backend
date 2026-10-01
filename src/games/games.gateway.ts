@@ -51,8 +51,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  /** Map<gameId, Set<userId>> — usuarios conectados por sala */
-  private roomUsers = new Map<string, Set<number>>();
+  /** Map<socketId, { userId, gameId }> */
+  private socketGameMap = new Map<string, { userId: number; gameId: string }>();
+
+  /** Map<gameId, Map<userId, Set<socketId>>> — sockets conectados por usuario y sala */
+  private roomUserSockets = new Map<string, Map<number, Set<string>>>();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -60,6 +63,31 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @Inject(forwardRef(() => GamesService))
     private readonly gamesService: GamesService,
   ) {}
+
+  private leaveRoomTracking(clientId: string): void {
+    const info = this.socketGameMap.get(clientId);
+    if (!info) return;
+
+    this.socketGameMap.delete(clientId);
+
+    const userSocketsMap = this.roomUserSockets.get(info.gameId);
+    if (userSocketsMap) {
+      const socketSet = userSocketsMap.get(info.userId);
+      if (socketSet) {
+        socketSet.delete(clientId);
+        if (socketSet.size === 0) {
+          userSocketsMap.delete(info.userId);
+          if (userSocketsMap.size === 0) {
+            this.roomUserSockets.delete(info.gameId);
+          }
+
+          this.server.to(info.gameId).emit('playerOffline', {
+            userId: info.userId,
+          });
+        }
+      }
+    }
+  }
 
   async handleConnection(client: Socket): Promise<void> {
     const token = this.extractToken(client);
@@ -87,25 +115,16 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       `Cliente desconectado: ${client.id}${data.user ? ` (user: ${data.user.sub})` : ''}`,
     );
 
-    if (data.user) {
-      const rooms = Array.from(client.rooms);
-      for (const roomId of rooms) {
-        if (roomId !== client.id) {
-          // Remove from tracked users
-          const users = this.roomUsers.get(roomId);
-          if (users) {
-            users.delete(data.user.sub);
-            if (users.size === 0) {
-              this.roomUsers.delete(roomId);
-            }
-          }
+    this.leaveRoomTracking(client.id);
+  }
 
-          this.server.to(roomId).emit('playerOffline', {
-            userId: data.user.sub,
-          });
-        }
-      }
-    }
+  @SubscribeMessage('leaveGameRoom')
+  async handleLeaveRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() gameId: string,
+  ): Promise<void> {
+    await client.leave(gameId);
+    this.leaveRoomTracking(client.id);
   }
 
   @SubscribeMessage('joinGameRoom')
@@ -128,6 +147,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
+    let characterName: string | undefined;
     const isMaster = game.masterId === data.user.sub;
     if (!isMaster) {
       const character = await this.prisma.character.findFirst({
@@ -137,24 +157,44 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.emit('error', { message: 'No tienes acceso a esta sala' });
         return;
       }
+      characterName = character.name;
+    } else {
+      characterName = 'Dungeon Master';
     }
+
+    // Clean up previous room tracking for this socket if any
+    this.leaveRoomTracking(client.id);
 
     await client.join(gameId);
     console.log(`Cliente ${client.id} se unió a la sala ${gameId}`);
 
-    // Track user in room
-    let users = this.roomUsers.get(gameId);
-    if (!users) {
-      users = new Set();
-      this.roomUsers.set(gameId, users);
+    // Track socket & user in room
+    this.socketGameMap.set(client.id, { userId: data.user.sub, gameId });
+
+    let userSocketsMap = this.roomUserSockets.get(gameId);
+    if (!userSocketsMap) {
+      userSocketsMap = new Map<number, Set<string>>();
+      this.roomUserSockets.set(gameId, userSocketsMap);
     }
-    users.add(data.user.sub);
+
+    let socketSet = userSocketsMap.get(data.user.sub);
+    const wasAlreadyOnline = Boolean(socketSet && socketSet.size > 0);
+    if (!socketSet) {
+      socketSet = new Set<string>();
+      userSocketsMap.set(data.user.sub, socketSet);
+    }
+    socketSet.add(client.id);
 
     // Send full list of connected users to the new joiner
-    client.emit('roomUsers', Array.from(users));
+    client.emit('roomUsers', Array.from(userSocketsMap.keys()));
 
-    // Notify others
-    client.to(gameId).emit('playerOnline', { userId: data.user.sub });
+    // Notify others in room if user wasn't online before
+    if (!wasAlreadyOnline) {
+      client.to(gameId).emit('playerOnline', {
+        userId: data.user.sub,
+        characterName,
+      });
+    }
   }
 
   @SubscribeMessage('setInitiative')

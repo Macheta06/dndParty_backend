@@ -106,9 +106,11 @@ describe('CharactersService', () => {
           inspiration: 0,
           temporary_hp: 0,
           is_npc: false,
+          gold_coins: 0,
           equipment: [],
           spells: [],
           proficiencies: [],
+          feature_traits: [],
         },
       });
     });
@@ -150,9 +152,8 @@ describe('CharactersService', () => {
           inspiration: 0,
           temporary_hp: 0,
           is_npc: false,
-          equipment: [{ name: 'Espada larga', qty: 1 }],
-          spells: ['Fire Bolt'],
-          proficiencies: ['Stealth'],
+          gold_coins: 0,
+          feature_traits: [],
         },
       });
     });
