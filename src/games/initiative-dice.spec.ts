@@ -38,6 +38,9 @@ const mockPrisma = {
     findUnique: jest.fn(),
     update: jest.fn(),
   },
+  character: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
 };
 
 const emitMock = jest.fn();

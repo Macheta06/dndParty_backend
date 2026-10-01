@@ -293,7 +293,33 @@ export class GamesService {
   ): Promise<InitiativeState> {
     await this.verifyGameMaster(gameId, userId);
 
-    const sorted = [...dto.entries].sort((a, b) => b.score - a.score);
+    const participantIds = dto.entries.map((e) => e.id);
+    const characters = await this.prisma.character.findMany({
+      where: { id: { in: participantIds } },
+      select: { id: true, dexterity: true },
+    });
+    const dexMap = new Map<number, number>();
+    characters.forEach((c) => dexMap.set(c.id, c.dexterity));
+
+    const sorted = [...dto.entries].sort((a, b) => {
+      // 1. Mayor resultado de iniciativa
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+      // 2. Desempate por atributo de Destreza (DEX)
+      const dexA = dexMap.get(a.id) ?? 10;
+      const dexB = dexMap.get(b.id) ?? 10;
+      if (dexB !== dexA) {
+        return dexB - dexA;
+      }
+      // 3. Desempate: Jugadores (PCs) antes que Enemigos (NPCs)
+      if (a.type !== b.type) {
+        return a.type === 'character' ? -1 : 1;
+      }
+      // 4. Desempate alfabético por nombre
+      return a.name.localeCompare(b.name);
+    });
+
     const state: InitiativeState = {
       entries: sorted,
       currentTurn: 0,
