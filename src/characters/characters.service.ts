@@ -67,8 +67,19 @@ export class CharactersService {
     }
 
     if (character.userId !== userId) {
-      if (character.game && character.game.masterId === userId) {
-        return character;
+      if (character.gameId) {
+        const isParticipant = await this.prisma.game.findFirst({
+          where: {
+            id: character.gameId,
+            OR: [
+              { masterId: userId },
+              { characters: { some: { userId } } },
+            ],
+          },
+        });
+        if (isParticipant) {
+          return character;
+        }
       }
       throw new ForbiddenException('You do not own this character');
     }

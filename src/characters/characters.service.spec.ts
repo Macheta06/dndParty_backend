@@ -53,6 +53,9 @@ const mockPrisma = {
     findUnique: jest.fn(),
     update: jest.fn(),
   },
+  game: {
+    findFirst: jest.fn(),
+  },
 };
 
 describe('CharactersService', () => {
@@ -192,13 +195,15 @@ describe('CharactersService', () => {
       });
     });
 
-    it('returns the character when user is the Dungeon Master of the game', async () => {
+    it('returns the character when user is a participant (DM or player) in the game', async () => {
       const gameCharacter = {
         ...mockCharacter,
         userId: 99,
+        gameId: 'game-1',
         game: { id: 'game-1', name: 'Partida Test', masterId: 7 },
       };
       mockPrisma.character.findUnique.mockResolvedValue(gameCharacter);
+      mockPrisma.game.findFirst.mockResolvedValue({ id: 'game-1' });
 
       const result = await service.getById(1, 7);
 
