@@ -263,16 +263,20 @@ describe('CharactersService', () => {
       );
     });
 
-    it('throws ConflictException when character is in a game', async () => {
+    it('allows updating character even when in an active game', async () => {
       mockPrisma.character.findUnique.mockResolvedValue({
         ...mockCharacter,
         gameId: 'some-game-id',
       });
+      mockPrisma.character.update.mockResolvedValue({
+        ...mockCharacter,
+        gameId: 'some-game-id',
+        name: 'Thorin el Fuerte',
+      });
 
-      const dto: UpdateCharacterDto = { name: 'Cheater' };
-      await expect(service.update(1, 7, dto)).rejects.toThrow(
-        ConflictException,
-      );
+      const dto: UpdateCharacterDto = { name: 'Thorin el Fuerte' };
+      const result = await service.update(1, 7, dto);
+      expect(result.name).toBe('Thorin el Fuerte');
     });
 
     it('throws NotFoundException when character is deleted', async () => {

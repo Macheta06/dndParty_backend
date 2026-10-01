@@ -104,12 +104,6 @@ export class CharactersService {
       throw new ForbiddenException('You do not own this character');
     }
 
-    if (character.gameId) {
-      throw new ConflictException(
-        'No se puede editar un personaje que está en una partida activa',
-      );
-    }
-
     const { feature_traits, equipment, proficiencies, spells, ...rest } = dto;
 
     const updateData: Prisma.CharacterUpdateInput = {
