@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -94,5 +95,14 @@ export class GamesController {
     @CurrentUser('sub') userId: number,
   ) {
     return this.gameService.getChatMessages(gameId, userId);
+  }
+
+  @Delete(':gameId/npcs/:npcId')
+  deleteNpc(
+    @Param('gameId') gameId: string,
+    @Param('npcId', ParseIntPipe) npcId: number,
+    @CurrentUser('sub') userId: number,
+  ) {
+    return this.gameService.deleteNpc(gameId, userId, npcId);
   }
 }

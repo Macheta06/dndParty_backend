@@ -271,6 +271,64 @@ export class GamesService {
     }
   }
 
+  async deleteNpc(gameId: string, userId: number, npcId: number) {
+    await this.verifyGameMaster(gameId, userId);
+
+    const npc = await this.prisma.character.findFirst({
+      where: { id: npcId, gameId, is_npc: true },
+    });
+
+    if (!npc) {
+      throw new NotFoundException('El enemigo no existe en esta partida');
+    }
+
+    const updated = await this.prisma.character.update({
+      where: { id: npcId },
+      data: { deleted: true, gameId: null },
+    });
+
+    // Remueve al NPC de la iniciativa activa si estaba presente
+    const game = await this.prisma.game.findUnique({ where: { id: gameId } });
+    if (game && game.initiative) {
+      const state = game.initiative as unknown as InitiativeState;
+      if (
+        state.entries &&
+        state.entries.some((e) => e.type === 'npc' && e.id === npcId)
+      ) {
+        const filteredEntries = state.entries.filter(
+          (e) => !(e.type === 'npc' && e.id === npcId),
+        );
+        if (filteredEntries.length === 0) {
+          await this.prisma.game.update({
+            where: { id: gameId },
+            data: { initiative: Prisma.DbNull },
+          });
+          this.gameGateway.server.to(gameId).emit('initiativeCleared');
+        } else {
+          const nextTurn =
+            state.currentTurn >= filteredEntries.length
+              ? 0
+              : state.currentTurn;
+          const newState: InitiativeState = {
+            ...state,
+            entries: filteredEntries,
+            currentTurn: nextTurn,
+          };
+          await this.prisma.game.update({
+            where: { id: gameId },
+            data: { initiative: newState as unknown as Prisma.InputJsonValue },
+          });
+          this.gameGateway.server
+            .to(gameId)
+            .emit('initiativeUpdated', newState);
+        }
+      }
+    }
+
+    this.gameGateway.server.to(gameId).emit('npcDeleted', npcId);
+    return updated;
+  }
+
   async createNote(gameId: string, userId: number, noteDto: CreateNoteDto) {
     await this.verifyGameMaster(gameId, userId);
 
