@@ -7,18 +7,64 @@ import { EquipCatalogEntry } from './equipment.types';
  */
 export const EQUIP_CATALOG: Record<string, EquipCatalogEntry> = {
   // ── Armaduras ────────────────────────────────────────────────
-  'armadura acolchada': { category: 'armor', acBase: 11, acFormula: 'dex', stealthDisadvantage: true },
+  'armadura acolchada': {
+    category: 'armor',
+    acBase: 11,
+    acFormula: 'dex',
+    stealthDisadvantage: true,
+  },
   'armadura de cuero': { category: 'armor', acBase: 11, acFormula: 'dex' },
-  'armadura de cuero tachonado': { category: 'armor', acBase: 12, acFormula: 'dex' },
-  'armadura de pieles': { category: 'armor', acBase: 12, acFormula: 'dex-capped' },
+  'armadura de cuero tachonado': {
+    category: 'armor',
+    acBase: 12,
+    acFormula: 'dex',
+  },
+  'armadura de pieles': {
+    category: 'armor',
+    acBase: 12,
+    acFormula: 'dex-capped',
+  },
   'camisa de cota': { category: 'armor', acBase: 13, acFormula: 'dex-capped' },
-  'cota de escamas': { category: 'armor', acBase: 14, acFormula: 'dex-capped', stealthDisadvantage: true },
+  'cota de escamas': {
+    category: 'armor',
+    acBase: 14,
+    acFormula: 'dex-capped',
+    stealthDisadvantage: true,
+  },
   coraza: { category: 'armor', acBase: 14, acFormula: 'dex-capped' },
-  'media armadura': { category: 'armor', acBase: 15, acFormula: 'dex-capped', stealthDisadvantage: true },
-  'armadura de anillos': { category: 'armor', acBase: 14, acFormula: 'flat', stealthDisadvantage: true },
-  'cota de mallas': { category: 'armor', acBase: 16, acFormula: 'flat', strengthReq: 13, stealthDisadvantage: true },
-  'armadura de bandas': { category: 'armor', acBase: 17, acFormula: 'flat', strengthReq: 15, stealthDisadvantage: true },
-  'armadura de placas': { category: 'armor', acBase: 18, acFormula: 'flat', strengthReq: 15, stealthDisadvantage: true },
+  'media armadura': {
+    category: 'armor',
+    acBase: 15,
+    acFormula: 'dex-capped',
+    stealthDisadvantage: true,
+  },
+  'armadura de anillos': {
+    category: 'armor',
+    acBase: 14,
+    acFormula: 'flat',
+    stealthDisadvantage: true,
+  },
+  'cota de mallas': {
+    category: 'armor',
+    acBase: 16,
+    acFormula: 'flat',
+    strengthReq: 13,
+    stealthDisadvantage: true,
+  },
+  'armadura de bandas': {
+    category: 'armor',
+    acBase: 17,
+    acFormula: 'flat',
+    strengthReq: 15,
+    stealthDisadvantage: true,
+  },
+  'armadura de placas': {
+    category: 'armor',
+    acBase: 18,
+    acFormula: 'flat',
+    strengthReq: 15,
+    stealthDisadvantage: true,
+  },
 
   // ── Escudos ──────────────────────────────────────────────────
   escudo: { category: 'shield', acBase: 2 },
@@ -45,7 +91,7 @@ export const EQUIP_CATALOG: Record<string, EquipCatalogEntry> = {
 
   // ── Armas marciales cuerpo a cuerpo ──────────────────────────
   'hacha de batalla': { category: 'weapon' },
-  'látigo': { category: 'weapon' },
+  látigo: { category: 'weapon' },
   alabarda: { category: 'weapon', twoHanded: true },
   'gran hacha': { category: 'weapon', twoHanded: true },
   'gran espada': { category: 'weapon', twoHanded: true },

@@ -8,7 +8,8 @@ export type EquipmentCategory =
   | 'tool'
   | 'magic';
 
-export type EquipmentSlot = 'armor' | 'shield' | 'weapon-main' | 'weapon-offhand';
+export type EquipmentSlot =
+  'armor' | 'shield' | 'weapon-main' | 'weapon-offhand';
 
 export type AcFormula = 'flat' | 'dex' | 'dex-capped';
 

@@ -172,7 +172,12 @@ describe('equipment.model', () => {
   });
 
   describe('computeAc', () => {
-    const human = { class: 'Fighter', dexterity: 14, constitution: 10, wisdom: 10 };
+    const human = {
+      class: 'Fighter',
+      dexterity: 14,
+      constitution: 10,
+      wisdom: 10,
+    };
 
     it('uses 10 + DEX with no armor equipped', () => {
       const result = computeAc(human, []);
@@ -209,29 +214,26 @@ describe('equipment.model', () => {
     });
 
     it('uses the armor base without DEX for heavy armor', () => {
-      const result = computeAc(
-        human,
-        [item('Cota de mallas', { slot: 'armor' })],
-      );
+      const result = computeAc(human, [
+        item('Cota de mallas', { slot: 'armor' }),
+      ]);
       expect(result.ac).toBe(16);
       expect(result.dexBonus).toBe(0);
       expect(result.armorName).toBe('Cota de mallas');
     });
 
     it('caps DEX at +2 for medium armor', () => {
-      const result = computeAc(
-        { ...human, dexterity: 20 },
-        [item('Cota de escamas', { slot: 'armor' })],
-      );
+      const result = computeAc({ ...human, dexterity: 20 }, [
+        item('Cota de escamas', { slot: 'armor' }),
+      ]);
       expect(result.ac).toBe(16);
       expect(result.dexBonus).toBe(2);
     });
 
     it('adds full DEX for light armor', () => {
-      const result = computeAc(
-        { ...human, dexterity: 20 },
-        [item('Armadura de cuero', { slot: 'armor' })],
-      );
+      const result = computeAc({ ...human, dexterity: 20 }, [
+        item('Armadura de cuero', { slot: 'armor' }),
+      ]);
       expect(result.ac).toBe(16);
       expect(result.dexBonus).toBe(5);
     });
@@ -254,10 +256,7 @@ describe('equipment.model', () => {
     });
 
     it('ignores items that are in the inventory but not equipped', () => {
-      const result = computeAc(human, [
-        item('Cota de mallas'),
-        item('Escudo'),
-      ]);
+      const result = computeAc(human, [item('Cota de mallas'), item('Escudo')]);
       expect(result.ac).toBe(12);
       expect(result.armorName).toBeUndefined();
     });

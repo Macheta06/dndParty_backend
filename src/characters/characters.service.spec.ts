@@ -58,6 +58,17 @@ const mockPrisma = {
   },
 };
 
+/** Última llamada a `character.update`, tipada para evitar `any` en los tests. */
+function lastUpdateCall<TData = Record<string, unknown>>(): {
+  where: { id: number };
+  data: TData;
+} {
+  const calls = mockPrisma.character.update.mock.calls as unknown as Array<
+    [{ where: { id: number }; data: TData }]
+  >;
+  return calls[calls.length - 1][0];
+}
+
 describe('CharactersService', () => {
   let service: CharactersService;
 
@@ -313,10 +324,10 @@ describe('CharactersService', () => {
       const result = await service.update(1, 7, { equipment });
 
       expect(result.armor).toBe(18);
-      expect(mockPrisma.character.update).toHaveBeenCalledWith({
-        where: { id: 1 },
-        data: expect.objectContaining({ armor: 18 }),
-      });
+      const call = lastUpdateCall<{ armor: number; equipment: unknown }>();
+      expect(call.where.id).toBe(1);
+      expect(call.data.armor).toBe(18);
+      expect(call.data.equipment).toEqual(equipment);
     });
 
     it('recomputes AC when a DEX stat changes', async () => {
@@ -335,10 +346,13 @@ describe('CharactersService', () => {
       mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
       mockPrisma.character.update.mockResolvedValue(mockCharacter);
 
-      await service.update(1, 7, { name: 'Aria', personality_traits: 'Serena' });
+      await service.update(1, 7, {
+        name: 'Aria',
+        personality_traits: 'Serena',
+      });
 
-      const data = mockPrisma.character.update.mock.calls[0][0].data;
-      expect(data).not.toHaveProperty('armor');
+      const call = lastUpdateCall();
+      expect(call.data).not.toHaveProperty('armor');
     });
   });
 

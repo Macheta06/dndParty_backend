@@ -108,6 +108,13 @@ function hasEquippedTwoHander(equipment: EquipmentItem[]): boolean {
   });
 }
 
+/** Copia del item sin el slot (desequipado). */
+function withoutSlot(item: EquipmentItem): EquipmentItem {
+  const copy: EquipmentItem = { ...item };
+  delete copy.slot;
+  return copy;
+}
+
 /**
  * Equipa un objeto en el slot indicado, desequipando automáticamente cualquier
  * otro objeto que ocupe ese mismo slot (una sola armadura, un solo escudo, etc).
@@ -128,7 +135,10 @@ export function equipItem(
 
   const resolved = resolveItem(target);
   if (!getAllowedSlots(resolved).includes(slot)) {
-    return { equipment, error: `«${target.name}» no puede equiparse en ese slot` };
+    return {
+      equipment,
+      error: `«${target.name}» no puede equiparse en ese slot`,
+    };
   }
 
   const isTwoHander =
@@ -153,7 +163,8 @@ export function equipItem(
 
   if (slot === 'shield' && hasEquippedTwoHander(equipment)) {
     const twoHander = equipment.find(
-      (item) => item.slot === 'weapon-main' && resolveItem(item).stats?.twoHanded,
+      (item) =>
+        item.slot === 'weapon-main' && resolveItem(item).stats?.twoHanded,
     );
     return {
       equipment,
@@ -163,7 +174,8 @@ export function equipItem(
 
   if (slot === 'weapon-offhand' && hasEquippedTwoHander(equipment)) {
     const twoHander = equipment.find(
-      (item) => item.slot === 'weapon-main' && resolveItem(item).stats?.twoHanded,
+      (item) =>
+        item.slot === 'weapon-main' && resolveItem(item).stats?.twoHanded,
     );
     return {
       equipment,
@@ -173,10 +185,7 @@ export function equipItem(
 
   const updated = equipment.map((item) => {
     if (item === target) return { ...item, slot };
-    if (item.slot === slot) {
-      const { slot: _slot, ...rest } = item;
-      return rest;
-    }
+    if (item.slot === slot) return withoutSlot(item);
     return item;
   });
 
@@ -190,8 +199,7 @@ export function unequipItem(
 ): EquipmentItem[] {
   return equipment.map((item) => {
     if (normalizeItemName(item.name) !== normalizeItemName(name)) return item;
-    const { slot: _slot, ...rest } = item;
-    return rest;
+    return withoutSlot(item);
   });
 }
 

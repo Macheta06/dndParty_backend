@@ -76,10 +76,7 @@ export class CharactersService {
         const isParticipant = await this.prisma.game.findFirst({
           where: {
             id: character.gameId,
-            OR: [
-              { masterId: userId },
-              { characters: { some: { userId } } },
-            ],
+            OR: [{ masterId: userId }, { characters: { some: { userId } } }],
           },
         });
         if (isParticipant) {
@@ -141,8 +138,8 @@ export class CharactersService {
           constitution: merged.constitution,
           wisdom: merged.wisdom,
         },
-        (equipment as EquipmentItem[] | undefined) ??
-          (character.equipment as EquipmentItem[]),
+        (equipment as unknown as EquipmentItem[] | undefined) ??
+          (character.equipment as unknown as EquipmentItem[]),
       ).ac;
     }
 

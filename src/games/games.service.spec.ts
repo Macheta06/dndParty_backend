@@ -147,6 +147,17 @@ const mockGateway = {
   },
 };
 
+/** Última llamada a `character.update`, tipada para evitar `any` en los tests. */
+function lastUpdateCall<TData = Record<string, unknown>>(): {
+  where: { id: number };
+  data: TData;
+} {
+  const calls = mockPrisma.character.update.mock.calls as unknown as Array<
+    [{ where: { id: number }; data: TData }]
+  >;
+  return calls[calls.length - 1][0];
+}
+
 describe('GamesService', () => {
   let service: GamesService;
 
@@ -437,6 +448,110 @@ describe('GamesService', () => {
         characterId: 1,
         current_hp: 15,
       });
+    });
+  });
+
+  describe('toggleEquipment', () => {
+    const gear = [
+      { name: 'Cota de mallas', quantity: 1 },
+      { name: 'Escudo', quantity: 1 },
+      { name: 'Gran hacha', quantity: 1 },
+    ];
+
+    const setupMaster = (equipment: Character['equipment']) => {
+      mockPrisma.game.findUnique.mockResolvedValue(gameFixture);
+      const character = characterFixture({
+        id: 1,
+        gameId: 'game-1',
+        equipment,
+      });
+      mockPrisma.character.findFirst.mockResolvedValue(character);
+      mockPrisma.character.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...character, ...data }),
+      );
+      return character;
+    };
+
+    it('throws ForbiddenException when the caller has no access to the game', async () => {
+      mockPrisma.game.findUnique.mockResolvedValue({
+        ...gameFixture,
+        masterId: 99,
+      });
+      mockPrisma.character.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.toggleEquipment('game-1', 1, 2, { name: 'Escudo' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws NotFoundException when the item is not in the inventory', async () => {
+      setupMaster([]);
+
+      await expect(
+        service.toggleEquipment('game-1', 1, 1, { name: 'Hacha de mano' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('equips an item into its default slot and recomputes AC', async () => {
+      const character = setupMaster(gear);
+
+      const result = await service.toggleEquipment('game-1', 1, 1, {
+        name: 'Cota de mallas',
+      });
+
+      expect(result.armor).toBe(16);
+      const call = lastUpdateCall<{ armor: number }>();
+      expect(call.where.id).toBe(character.id);
+      expect(call.data.armor).toBe(16);
+    });
+
+    it('adds the shield bonus on top of the equipped armor', async () => {
+      setupMaster(
+        gear.map((i) =>
+          i.name === 'Cota de mallas' ? { ...i, slot: 'armor' } : i,
+        ),
+      );
+
+      const result = await service.toggleEquipment('game-1', 1, 1, {
+        name: 'Escudo',
+      });
+
+      expect(result.armor).toBe(18);
+    });
+
+    it('broadcasts equipmentUpdated with the new armor value', async () => {
+      setupMaster(gear);
+
+      await service.toggleEquipment('game-1', 1, 1, { name: 'Cota de mallas' });
+
+      expect(mockGateway.server.to).toHaveBeenCalledWith('game-1');
+      expect(emitMock).toHaveBeenCalledWith(
+        'equipmentUpdated',
+        expect.objectContaining({ characterId: 1, armor: 16 }),
+      );
+    });
+
+    it('unequips an already equipped item and restores the unarmored AC', async () => {
+      setupMaster([{ name: 'Cota de mallas', quantity: 1, slot: 'armor' }]);
+
+      const result = await service.toggleEquipment('game-1', 1, 1, {
+        name: 'Cota de mallas',
+      });
+
+      // Rogue DES 14 sin armadura: 10 + 2
+      expect(result.armor).toBe(12);
+    });
+
+    it('rejects a two-handed weapon while a shield is equipped', async () => {
+      setupMaster([
+        { name: 'Cota de mallas', quantity: 1, slot: 'armor' },
+        { name: 'Escudo', quantity: 1, slot: 'shield' },
+        { name: 'Gran hacha', quantity: 1 },
+      ]);
+
+      await expect(
+        service.toggleEquipment('game-1', 1, 1, { name: 'Gran hacha' }),
+      ).rejects.toThrow('ambas manos');
     });
   });
 

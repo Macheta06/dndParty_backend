@@ -19,6 +19,20 @@ import { SetInitiativeDto } from './dto/initiative.dto';
 import { GrantXpDto } from './dto/grant-xp.dto';
 import { CreateChatMessageDto } from './dto/chat.dto';
 import { AddEquipmentDto, RemoveEquipmentDto } from './dto/equipment.dto';
+import { ToggleEquipmentDto } from './dto/toggle-equipment.dto';
+import {
+  computeAc,
+  equipItem,
+  getAllowedSlots,
+  unequipItem,
+} from '../characters/equipment.model';
+import { EquipmentItem, EquipmentSlot } from '../characters/equipment.types';
+
+/** Slot por defecto al equipar: armadura → armor, escudo → shield, arma → mano principal. */
+function defaultSlot(item: EquipmentItem): EquipmentSlot {
+  const slots = getAllowedSlots(item);
+  return slots[0] ?? 'weapon-main';
+}
 
 export interface InitiativeEntry {
   type: 'character' | 'npc';
@@ -140,7 +154,9 @@ export class GamesService {
       },
     });
 
-    this.gameGateway.server.to(game.id).emit('characterJoined', updatedCharacter);
+    this.gameGateway.server
+      .to(game.id)
+      .emit('characterJoined', updatedCharacter);
 
     return {
       id: updatedCharacter.id,
@@ -306,9 +322,7 @@ export class GamesService {
           this.gameGateway.server.to(gameId).emit('initiativeCleared');
         } else {
           const nextTurn =
-            state.currentTurn >= filteredEntries.length
-              ? 0
-              : state.currentTurn;
+            state.currentTurn >= filteredEntries.length ? 0 : state.currentTurn;
           const newState: InitiativeState = {
             ...state,
             entries: filteredEntries,
@@ -549,26 +563,19 @@ export class GamesService {
     userId: number,
     dto: AddEquipmentDto,
   ) {
-    await this.verifyGameAccess(gameId, userId);
+    const character = await this.verifyCharacterInGame(
+      gameId,
+      characterId,
+      userId,
+    );
 
-    const character = await this.prisma.character.findFirst({
-      where: { id: characterId, gameId },
-    });
-    if (!character) {
-      throw new NotFoundException('Personaje no encontrado en esta partida');
-    }
-
-    const equipment = (character.equipment as Array<{
-      name: string;
-      quantity: number;
-      description?: string;
-    }>) ?? [];
+    const equipment = (character.equipment as unknown as EquipmentItem[]) ?? [];
 
     const existing = equipment.find(
       (item) => item.name.toLowerCase() === dto.name.toLowerCase(),
     );
 
-    let updatedEquipment;
+    let updatedEquipment: EquipmentItem[];
     if (existing) {
       updatedEquipment = equipment.map((item) =>
         item.name.toLowerCase() === dto.name.toLowerCase()
@@ -576,20 +583,17 @@ export class GamesService {
           : item,
       );
     } else {
-      updatedEquipment = [...equipment, { name: dto.name, quantity: dto.quantity, description: dto.description }];
+      updatedEquipment = [
+        ...equipment,
+        {
+          name: dto.name,
+          quantity: dto.quantity,
+          description: dto.description,
+        },
+      ];
     }
 
-    const updated = await this.prisma.character.update({
-      where: { id: characterId },
-      data: { equipment: updatedEquipment as unknown as Prisma.InputJsonValue },
-    });
-
-    this.gameGateway.server.to(gameId).emit('equipmentUpdated', {
-      characterId,
-      equipment: updated.equipment,
-    });
-
-    return updated;
+    return this.persistEquipment(gameId, character, updatedEquipment);
   }
 
   async removeEquipment(
@@ -598,20 +602,13 @@ export class GamesService {
     userId: number,
     dto: RemoveEquipmentDto,
   ) {
-    await this.verifyGameAccess(gameId, userId);
+    const character = await this.verifyCharacterInGame(
+      gameId,
+      characterId,
+      userId,
+    );
 
-    const character = await this.prisma.character.findFirst({
-      where: { id: characterId, gameId },
-    });
-    if (!character) {
-      throw new NotFoundException('Personaje no encontrado en esta partida');
-    }
-
-    const equipment = (character.equipment as Array<{
-      name: string;
-      quantity: number;
-      description?: string;
-    }>) ?? [];
+    const equipment = (character.equipment as unknown as EquipmentItem[]) ?? [];
 
     const existing = equipment.find(
       (item) => item.name.toLowerCase() === dto.name.toLowerCase(),
@@ -621,7 +618,7 @@ export class GamesService {
     }
 
     const newQuantity = existing.quantity - dto.quantity;
-    let updatedEquipment;
+    let updatedEquipment: EquipmentItem[];
     if (newQuantity <= 0) {
       updatedEquipment = equipment.filter(
         (item) => item.name.toLowerCase() !== dto.name.toLowerCase(),
@@ -634,14 +631,95 @@ export class GamesService {
       );
     }
 
+    return this.persistEquipment(gameId, character, updatedEquipment);
+  }
+
+  /** Carga/unda un objeto del inventario respetando los slots de equipamiento. */
+  async toggleEquipment(
+    gameId: string,
+    characterId: number,
+    userId: number,
+    dto: ToggleEquipmentDto,
+  ) {
+    const character = await this.verifyCharacterInGame(
+      gameId,
+      characterId,
+      userId,
+    );
+
+    const equipment = (character.equipment as unknown as EquipmentItem[]) ?? [];
+    const target = equipment.find(
+      (item) => item.name.toLowerCase() === dto.name.toLowerCase(),
+    );
+    if (!target) {
+      throw new NotFoundException('No tenés ese objeto en el inventario');
+    }
+
+    const { equipment: updated, error } = target.slot
+      ? { equipment: unequipItem(equipment, dto.name), error: undefined }
+      : equipItem(equipment, dto.name, dto.slot ?? defaultSlot(target));
+
+    if (error) {
+      throw new BadRequestException(error);
+    }
+
+    return this.persistEquipment(gameId, character, updated);
+  }
+
+  private async verifyCharacterInGame(
+    gameId: string,
+    characterId: number,
+    userId: number,
+  ) {
+    await this.verifyGameAccess(gameId, userId);
+
+    const character = await this.prisma.character.findFirst({
+      where: { id: characterId, gameId },
+    });
+    if (!character) {
+      throw new NotFoundException('Personaje no encontrado en esta partida');
+    }
+
+    return character;
+  }
+
+  /**
+   * Persiste el inventario junto con la CA derivada y emite el broadcast.
+   * La CA se recalcula aquí porque es un valor derivado del equipamiento.
+   */
+  private async persistEquipment(
+    gameId: string,
+    character: {
+      id: number;
+      class: string;
+      dexterity: number;
+      constitution: number;
+      wisdom: number;
+    },
+    equipment: EquipmentItem[],
+  ) {
+    const ac = computeAc(
+      {
+        class: character.class,
+        dexterity: character.dexterity,
+        constitution: character.constitution,
+        wisdom: character.wisdom,
+      },
+      equipment,
+    );
+
     const updated = await this.prisma.character.update({
-      where: { id: characterId },
-      data: { equipment: updatedEquipment as unknown as Prisma.InputJsonValue },
+      where: { id: character.id },
+      data: {
+        equipment: equipment as unknown as Prisma.InputJsonValue,
+        armor: ac.ac,
+      },
     });
 
     this.gameGateway.server.to(gameId).emit('equipmentUpdated', {
-      characterId,
+      characterId: character.id,
       equipment: updated.equipment,
+      armor: updated.armor,
     });
 
     return updated;

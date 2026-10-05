@@ -16,6 +16,7 @@ import { RollDiceDto } from './dto/initiative.dto';
 import { GrantXpDto } from './dto/grant-xp.dto';
 import { CreateChatMessageDto } from './dto/chat.dto';
 import { AddEquipmentDto, RemoveEquipmentDto } from './dto/equipment.dto';
+import { ToggleEquipmentDto } from './dto/toggle-equipment.dto';
 import { Inject, forwardRef } from '@nestjs/common';
 
 interface SocketData {
@@ -36,7 +37,10 @@ const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3001')
 
 @WebSocketGateway({
   cors: {
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       const normalized = normalizeOrigin(origin || '');
       if (!origin || allowedOrigins.includes(normalized)) {
         callback(null, true);
@@ -361,7 +365,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data.gameId,
         data.characterId,
         socketData.user.sub,
-        { name: data.name, quantity: data.quantity, description: data.description },
+        {
+          name: data.name,
+          quantity: data.quantity,
+          description: data.description,
+        },
       );
     } catch (err) {
       const message =
@@ -392,6 +400,32 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Error al quitar objeto';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('toggleEquipment')
+  async handleToggleEquipment(
+    @ConnectedSocket() client: Socket,
+    @MessageBody()
+    data: ToggleEquipmentDto & { gameId: string; characterId: number },
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      await this.gamesService.toggleEquipment(
+        data.gameId,
+        data.characterId,
+        socketData.user.sub,
+        { name: data.name, slot: data.slot },
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al equipar objeto';
       client.emit('error', { message });
     }
   }
