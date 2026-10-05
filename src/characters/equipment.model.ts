@@ -69,6 +69,10 @@ function entryToStats(entry: EquipCatalogEntry): EquipmentItem['stats'] {
   if (entry.stealthDisadvantage !== undefined) {
     stats.stealthDisadvantage = entry.stealthDisadvantage;
   }
+  if (entry.damage !== undefined) stats.damage = entry.damage;
+  if (entry.damageType !== undefined) stats.damageType = entry.damageType;
+  if (entry.finesse !== undefined) stats.finesse = entry.finesse;
+  if (entry.range !== undefined) stats.range = entry.range;
   return stats;
 }
 

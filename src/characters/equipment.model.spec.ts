@@ -10,6 +10,7 @@ import {
   validateEquipmentTransition,
 } from './equipment.model';
 import { EquipmentItem } from './equipment.types';
+import { EQUIP_CATALOG } from './equipment.catalog';
 
 const item = (
   name: string,
@@ -42,6 +43,39 @@ describe('equipment.model', () => {
     it('leaves unknown items untouched', () => {
       const source = item('Raciones de viaje');
       expect(resolveItem(source)).toEqual(source);
+    });
+
+    it('fills weapon damage from the catalog', () => {
+      const resolved = resolveItem(item('Espada larga'));
+
+      expect(resolved.category).toBe('weapon');
+      expect(resolved.stats?.damage).toBe('1d8');
+      expect(resolved.stats?.damageType).toBe('cortante');
+      expect(resolved.stats?.finesse).toBeUndefined();
+    });
+
+    it('marks finesse and ranged weapons', () => {
+      expect(resolveItem(item('Estoque')).stats?.finesse).toBe(true);
+      expect(resolveItem(item('Arco largo')).stats?.range).toBe('150/600');
+    });
+
+    it('gives every weapon in the catalog a damage roll', () => {
+      const weapons = Object.entries(EQUIP_CATALOG).filter(
+        ([, entry]) => entry.category === 'weapon',
+      );
+
+      // Un arma sin daño no podría atacar y el fallo sería silencioso.
+      expect(weapons.length).toBeGreaterThan(30);
+      for (const [key, entry] of weapons) {
+        expect([key, entry.damage]).toEqual([
+          key,
+          expect.stringMatching(/^\d+d\d+$/),
+        ]);
+        expect([key, entry.damageType]).toEqual([
+          key,
+          expect.stringMatching(/^(cortante|perforante|contundente)$/),
+        ]);
+      }
     });
   });
 
