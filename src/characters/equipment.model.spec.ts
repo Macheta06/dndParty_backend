@@ -146,6 +146,44 @@ describe('equipment.model', () => {
       expect(equipment[1].slot).toBe('shield');
     });
 
+    it('rejects an offhand weapon while a shield is equipped', () => {
+      const { equipment, error } = equipItem(
+        [item('Escudo', { slot: 'shield' }), item('Daga')],
+        'Daga',
+        'weapon-offhand',
+      );
+
+      expect(error).toContain('arma secundaria');
+      expect(error).toContain('Escudo');
+      expect(equipment[1].slot).toBeUndefined();
+    });
+
+    it('rejects a shield while an offhand weapon is equipped', () => {
+      const { error } = equipItem(
+        [
+          item('Espada larga', { slot: 'weapon-main' }),
+          item('Espada corta', { slot: 'weapon-offhand' }),
+          item('Escudo'),
+        ],
+        'Escudo',
+        'shield',
+      );
+
+      expect(error).toContain('escudo');
+      expect(error).toContain('Espada corta');
+    });
+
+    it('still allows dual wielding when no shield is equipped', () => {
+      const { equipment, error } = equipItem(
+        [item('Daga', { slot: 'weapon-main' }), item('Espada corta')],
+        'Espada corta',
+        'weapon-offhand',
+      );
+
+      expect(error).toBeUndefined();
+      expect(equipment[1].slot).toBe('weapon-offhand');
+    });
+
     it('errors when the item is not in the inventory', () => {
       const { error } = equipItem([item('Daga')], 'Hacha de mano', 'armor');
       expect(error).toBe('El objeto no está en el inventario');
@@ -178,12 +216,12 @@ describe('equipment.model', () => {
     });
 
     it('accepts armor, shield and a one-handed weapon together', () => {
+      // Arma principal + escudo = las dos manos. Sin lugar para la secundaria.
       expect(
         validateEquipment([
           item('Cota de mallas', { slot: 'armor' }),
           item('Escudo', { slot: 'shield' }),
           item('Espada larga', { slot: 'weapon-main' }),
-          item('Daga', { slot: 'weapon-offhand' }),
         ]),
       ).toBeUndefined();
     });
@@ -226,6 +264,41 @@ describe('equipment.model', () => {
       ]);
 
       expect(error).toContain('no puede equiparse');
+    });
+
+    it('rejects a shield equipped together with an offhand weapon', () => {
+      const error = validateEquipment([
+        item('Espada larga', { slot: 'weapon-main' }),
+        item('Escudo', { slot: 'shield' }),
+        item('Espada corta', { slot: 'weapon-offhand' }),
+      ]);
+
+      expect(error).toContain('Escudo');
+      expect(error).toContain('Espada corta');
+      expect(error).toContain('una mano');
+    });
+
+    it('rejects the shield and offhand conflict regardless of array order', () => {
+      const offhandFirst = validateEquipment([
+        item('Espada corta', { slot: 'weapon-offhand' }),
+        item('Escudo', { slot: 'shield' }),
+      ]);
+      const shieldFirst = validateEquipment([
+        item('Escudo', { slot: 'shield' }),
+        item('Espada corta', { slot: 'weapon-offhand' }),
+      ]);
+
+      expect(offhandFirst).toContain('una mano');
+      expect(shieldFirst).toContain('una mano');
+    });
+
+    it('accepts dual wielding without a shield', () => {
+      expect(
+        validateEquipment([
+          item('Daga', { slot: 'weapon-main' }),
+          item('Espada corta', { slot: 'weapon-offhand' }),
+        ]),
+      ).toBeUndefined();
     });
 
     it('ignores items that are not equipped', () => {

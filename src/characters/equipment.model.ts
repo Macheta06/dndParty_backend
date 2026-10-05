@@ -118,8 +118,8 @@ function withoutSlot(item: EquipmentItem): EquipmentItem {
 /**
  * Equipa un objeto en el slot indicado, desequipando automáticamente cualquier
  * otro objeto que ocupe ese mismo slot (una sola armadura, un solo escudo, etc).
- * Los conflictos de manos (arma a dos manos vs escudo/secundaria) se bloquean
- * con un mensaje en lugar de hacer un swap silencioso.
+ * Los conflictos de manos (arma a dos manos vs escudo/secundaria, y escudo vs
+ * arma secundaria) se bloquean con un mensaje en vez de un swap silencioso.
  */
 export function equipItem(
   equipment: EquipmentItem[],
@@ -156,7 +156,7 @@ export function equipItem(
     if (blockers.length > 0) {
       return {
         equipment,
-        error: `«${target.name}» necesita ambas manos. Desequpa antes: ${blockers.join(', ')}`,
+        error: `«${target.name}» necesita ambas manos. Desequipa antes: ${blockers.join(', ')}`,
       };
     }
   }
@@ -183,6 +183,32 @@ export function equipItem(
     };
   }
 
+  // Un escudo ocupa una mano y el arma secundaria la otra: no pueden
+  // convivir, porque ya no quedaría mano para el arma principal.
+  if (slot === 'weapon-offhand') {
+    const shield = equipment.find(
+      (item) => item !== target && item.slot === 'shield',
+    );
+    if (shield) {
+      return {
+        equipment,
+        error: `No puedes equipar un arma secundaria: «${shield.name}» ocupa esa mano. Desequipa el escudo primero`,
+      };
+    }
+  }
+
+  if (slot === 'shield') {
+    const offhand = equipment.find(
+      (item) => item !== target && item.slot === 'weapon-offhand',
+    );
+    if (offhand) {
+      return {
+        equipment,
+        error: `No puedes equipar un escudo: «${offhand.name}» ocupa la otra mano. Desequipa el arma secundaria primero`,
+      };
+    }
+  }
+
   const updated = equipment.map((item) => {
     if (item === target) return { ...item, slot };
     if (item.slot === slot) return withoutSlot(item);
@@ -205,8 +231,8 @@ export function unequipItem(
 
 /**
  * Valida el ESTADO final del equipamiento (no una transición): dos objetos no
- * pueden compartir slot y un arma a dos manos no puede convivir con escudo ni
- * con arma secundaria.
+ * pueden compartir slot, un arma a dos manos no puede convivir con escudo ni
+ * con arma secundaria, y escudo y arma secundaria no pueden ir juntos.
  *
  * El camino de sockets valida la transición con `equipItem`; este valida el
  * arreglo completo que el cliente envía por REST, donde el server no ve el
@@ -250,6 +276,15 @@ export function validateEquipment(
     if (blockers.length > 0) {
       return `«${twoHander.name}» necesita ambas manos. Desequipa antes: ${blockers.join(', ')}`;
     }
+  }
+
+  // Un escudo ocupa una mano y el arma secundaria la otra: sin lugar para el
+  // arma principal. Se valida como estado, no como transición, para que no se
+  // llegue al mismo sitio equipando en el orden inverso.
+  const shieldName = seen.get('shield');
+  const offhandName = seen.get('weapon-offhand');
+  if (shieldName !== undefined && offhandName !== undefined) {
+    return `«${shieldName}» y «${offhandName}» no pueden ir juntos: cada uno ocupa una mano y no queda mano para el arma principal. Desequipa uno de los dos`;
   }
 
   return undefined;

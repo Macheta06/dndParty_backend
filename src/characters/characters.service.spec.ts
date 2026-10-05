@@ -397,6 +397,22 @@ describe('CharactersService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('rejects a shield equipped together with an offhand weapon', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+
+      await expect(
+        service.update(1, 7, {
+          equipment: [
+            { name: 'Espada larga', quantity: 1, slot: 'weapon-main' },
+            { name: 'Escudo', quantity: 1, slot: 'shield' },
+            { name: 'Espada corta', quantity: 1, slot: 'weapon-offhand' },
+          ],
+        }),
+      ).rejects.toThrow('una mano');
+
+      expect(mockPrisma.character.update).not.toHaveBeenCalled();
+    });
+
     // Estos tests van contra una instancia del DTO creada por plainToInstance,
     // que es lo que realmente ve el service detrás del ValidationPipe. Con un
     // object literal no se reproduce: plainToInstance agrega TODAS las
