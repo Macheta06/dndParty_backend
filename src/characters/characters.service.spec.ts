@@ -413,7 +413,53 @@ describe('CharactersService', () => {
       expect(mockPrisma.character.update).not.toHaveBeenCalled();
     });
 
-    // Estos tests van contra una instancia del DTO creada por plainToInstance,
+    it('rejects replacing an equipped main weapon in one REST call', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        equipment: [{ name: 'Espada larga', quantity: 1, slot: 'weapon-main' }],
+      });
+
+      await expect(
+        service.update(1, 7, {
+          equipment: [
+            { name: 'Espada larga', quantity: 1 },
+            { name: 'Daga', quantity: 1, slot: 'weapon-main' },
+          ],
+        }),
+      ).rejects.toThrow('mano principal');
+
+      expect(mockPrisma.character.update).not.toHaveBeenCalled();
+    });
+
+    it('allows moving the main weapon to the offhand and back in two calls', async () => {
+      const equippedMain = {
+        ...mockCharacter,
+        equipment: [{ name: 'Espada larga', quantity: 1, slot: 'weapon-main' }],
+      };
+      const unequipped = {
+        ...mockCharacter,
+        equipment: [{ name: 'Espada larga', quantity: 1 }],
+      };
+
+      // Paso 1: desequipar la mano principal.
+      mockPrisma.character.findUnique.mockResolvedValueOnce(equippedMain);
+      mockPrisma.character.update.mockResolvedValueOnce(equippedMain);
+      await service.update(1, 7, {
+        equipment: [{ name: 'Espada larga', quantity: 1 }],
+      });
+
+      // Paso 2: con la mano libre, la otra arma entra sin problema.
+      mockPrisma.character.findUnique.mockResolvedValueOnce(unequipped);
+      mockPrisma.character.update.mockResolvedValueOnce(unequipped);
+      await service.update(1, 7, {
+        equipment: [
+          { name: 'Espada larga', quantity: 1 },
+          { name: 'Daga', quantity: 1, slot: 'weapon-main' },
+        ],
+      });
+
+      expect(mockPrisma.character.update).toHaveBeenCalledTimes(2);
+    });
     // que es lo que realmente ve el service detrás del ValidationPipe. Con un
     // object literal no se reproduce: plainToInstance agrega TODAS las
     // propiedades del DTO como propias con valor `undefined`, y ese `undefined`

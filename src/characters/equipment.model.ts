@@ -141,6 +141,21 @@ export function equipItem(
     };
   }
 
+  // Con el arma principal ocupada, otra arma solo cabe en la secundaria:
+  // cambiar de arma principal hay que hacerlo en dos pasos (desequipar y
+  // equipar) para no pisar el arma actual en silencio.
+  if (slot === 'weapon-main') {
+    const currentMain = equipment.find(
+      (item) => item !== target && item.slot === 'weapon-main',
+    );
+    if (currentMain) {
+      return {
+        equipment,
+        error: `«${target.name}» no puede ir a la mano principal: ya llevas «${currentMain.name}». Desequipa el arma actual antes de cambiarla`,
+      };
+    }
+  }
+
   const isTwoHander =
     resolved.category === 'weapon' && resolved.stats?.twoHanded === true;
 
@@ -288,6 +303,33 @@ export function validateEquipment(
   }
 
   return undefined;
+}
+
+/**
+ * Compara el inventario anterior con el siguiente y rechaza los cambios que
+ * solo se pueden dar por pasos: con el arma principal ocupada, otra arma
+ * solo puede ir a la secundaria.
+ *
+ * Es lo contrario que `validateEquipment`: ese valida un estado y por eso no
+ * puede ver esto (un estado con una sola arma principal siempre es válido).
+ * Hace falta en REST, que solo recibe el arreglo final pero sí tiene a mano
+ * el que había antes.
+ */
+export function validateEquipmentTransition(
+  previous: EquipmentItem[],
+  next: EquipmentItem[],
+): string | undefined {
+  const prevMain = previous.find((item) => item.slot === 'weapon-main');
+  if (!prevMain) return undefined; // La mano estaba libre: entra quien sea.
+
+  const nextMain = next.find((item) => item.slot === 'weapon-main');
+  if (!nextMain) return undefined; // Desequipar siempre está permitido.
+
+  if (normalizeItemName(nextMain.name) === normalizeItemName(prevMain.name)) {
+    return undefined; // Sigue siendo el mismo arma en la misma mano.
+  }
+
+  return `«${nextMain.name}» no puede pasar a la mano principal mientras «${prevMain.name}» esté equipada. Desequipa el arma actual antes de cambiarla`;
 }
 
 /**

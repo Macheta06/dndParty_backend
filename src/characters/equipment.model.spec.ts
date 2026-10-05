@@ -7,6 +7,7 @@ import {
   resolveItem,
   unequipItem,
   validateEquipment,
+  validateEquipmentTransition,
 } from './equipment.model';
 import { EquipmentItem } from './equipment.types';
 
@@ -188,6 +189,39 @@ describe('equipment.model', () => {
       const { error } = equipItem([item('Daga')], 'Hacha de mano', 'armor');
       expect(error).toBe('El objeto no está en el inventario');
     });
+
+    it('rejects a new weapon while the main hand is occupied', () => {
+      const { equipment, error } = equipItem(
+        [item('Espada larga', { slot: 'weapon-main' }), item('Daga')],
+        'Daga',
+        'weapon-main',
+      );
+
+      expect(error).toContain('mano principal');
+      expect(error).toContain('Espada larga');
+      expect(equipment[1].slot).toBeUndefined();
+    });
+
+    it('sends a second weapon to the offhand while the main hand is occupied', () => {
+      const { equipment, error } = equipItem(
+        [item('Espada larga', { slot: 'weapon-main' }), item('Espada corta')],
+        'Espada corta',
+        'weapon-offhand',
+      );
+
+      expect(error).toBeUndefined();
+      expect(equipment[1].slot).toBe('weapon-offhand');
+    });
+
+    it('rejects a two-handed weapon while the main hand is occupied', () => {
+      const { error } = equipItem(
+        [item('Daga', { slot: 'weapon-main' }), item('Gran hacha')],
+        'Gran hacha',
+        'weapon-main',
+      );
+
+      expect(error).toContain('Daga');
+    });
   });
 
   describe('unequipItem', () => {
@@ -309,6 +343,57 @@ describe('equipment.model', () => {
           item('Cota de mallas', { slot: 'armor' }),
         ]),
       ).toBeUndefined();
+    });
+  });
+
+  describe('validateEquipmentTransition', () => {
+    const withMain = [item('Espada larga', { slot: 'weapon-main' })];
+
+    it('rejects swapping the main weapon in a single step', () => {
+      const error = validateEquipmentTransition(withMain, [
+        item('Espada larga'),
+        item('Daga', { slot: 'weapon-main' }),
+      ]);
+
+      expect(error).toContain('mano principal');
+      expect(error).toContain('Espada larga');
+    });
+
+    it('rejects replacing the main weapon while demoting it to the offhand', () => {
+      const error = validateEquipmentTransition(withMain, [
+        item('Espada larga', { slot: 'weapon-offhand' }),
+        item('Daga', { slot: 'weapon-main' }),
+      ]);
+
+      expect(error).toContain('Espada larga');
+    });
+
+    it('accepts keeping the same weapon in the main hand', () => {
+      expect(
+        validateEquipmentTransition(withMain, [
+          item('Espada larga', { slot: 'weapon-main' }),
+          item('Escudo', { slot: 'shield' }),
+        ]),
+      ).toBeUndefined();
+    });
+
+    it('accepts unequipping the main weapon', () => {
+      expect(
+        validateEquipmentTransition(withMain, [item('Espada larga')]),
+      ).toBeUndefined();
+    });
+
+    it('accepts filling a main hand that was free', () => {
+      expect(
+        validateEquipmentTransition(
+          [],
+          [item('Daga', { slot: 'weapon-main' })],
+        ),
+      ).toBeUndefined();
+    });
+
+    it('is a no-op when the previous inventory is empty', () => {
+      expect(validateEquipmentTransition([], withMain)).toBeUndefined();
     });
   });
 
