@@ -78,8 +78,10 @@ export const EQUIP_CATALOG: Record<string, EquipCatalogEntry> = {
   bastón: { category: 'weapon' },
   hoz: { category: 'weapon' },
   lanza: { category: 'weapon' },
+  'lanza corta': { category: 'weapon' },
   'hacha de mano': { category: 'weapon' },
   martillo: { category: 'weapon' },
+  'martillo ligero': { category: 'weapon' },
   jabalina: { category: 'weapon' },
 
   // ── Armas sencillas a distancia ──────────────────────────────
@@ -91,6 +93,7 @@ export const EQUIP_CATALOG: Record<string, EquipCatalogEntry> = {
 
   // ── Armas marciales cuerpo a cuerpo ──────────────────────────
   'hacha de batalla': { category: 'weapon' },
+  mangual: { category: 'weapon' },
   látigo: { category: 'weapon' },
   alabarda: { category: 'weapon', twoHanded: true },
   'gran hacha': { category: 'weapon', twoHanded: true },
