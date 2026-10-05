@@ -28,7 +28,9 @@ import {
 } from '../characters/equipment.model';
 import { EquipmentItem, EquipmentSlot } from '../characters/equipment.types';
 import { RollCharacterDto } from './dto/roll.dto';
+import { AttackDto } from './dto/attack.dto';
 import { CharacterRoll, resolveRoll } from '../characters/rolls.model';
+import { AttackRoll, resolveAttack } from '../characters/attacks.model';
 
 /** Slot por defecto al equipar: armadura → armor, escudo → shield, arma → mano principal. */
 function defaultSlot(item: EquipmentItem): EquipmentSlot {
@@ -63,6 +65,16 @@ export interface CharacterRollEvent extends CharacterRoll {
   userName: string;
   characterId: number;
   characterName: string;
+}
+
+/** Ataque ya resuelto: contra quién, si acertó y cuánto dolio. */
+export interface AttackEvent extends AttackRoll {
+  userId: number;
+  userName: string;
+  attackerId: number;
+  attackerName: string;
+  targetId: number;
+  targetName: string;
 }
 
 @Injectable()
@@ -491,22 +503,19 @@ export class GamesService {
   }
 
   /**
-   * Tira una habilidad o salvación de un personaje de la partida.
-   *
-   * El server resuelve el atributo, la competencia y el bono: el cliente solo
-   * pide la tirada, así que nadie suma nada a mano ni puede inflar el número.
-   * Solo el dueño de un PJ o el DM pueden tirar por alguien.
+   * Carga un personaje de la partida y comprueba que quien lo usa puede
+   * decidir por él: su dueño o el DM. Las reglas de permiso viven solo aquí
+   * para que tirar y atacar no acaben con criterios distintos.
    */
-  async rollCharacter(
+  private async verifyCharacterPermission(
     gameId: string,
     userId: number,
-    userName: string,
-    dto: RollCharacterDto,
-  ): Promise<CharacterRollEvent> {
+    characterId: number,
+  ) {
     const game = await this.verifyGameAccess(gameId, userId);
 
     const character = await this.prisma.character.findFirst({
-      where: { id: dto.characterId, gameId },
+      where: { id: characterId, gameId },
     });
     if (!character) {
       throw new NotFoundException('Personaje no encontrado en esta partida');
@@ -519,6 +528,28 @@ export class GamesService {
       );
     }
 
+    return character;
+  }
+
+  /**
+   * Tira una habilidad o salvación de un personaje de la partida.
+   *
+   * El server resuelve el atributo, la competencia y el bono: el cliente solo
+   * pide la tirada, así que nadie suma nada a mano ni puede inflar el número.
+   * Solo el dueño de un PJ o el DM pueden tirar por alguien.
+   */
+  async rollCharacter(
+    gameId: string,
+    userId: number,
+    userName: string,
+    dto: RollCharacterDto,
+  ): Promise<CharacterRollEvent> {
+    const character = await this.verifyCharacterPermission(
+      gameId,
+      userId,
+      dto.characterId,
+    );
+
     const roll = resolveRoll(character, dto);
 
     const event: CharacterRollEvent = {
@@ -530,6 +561,52 @@ export class GamesService {
     };
 
     this.gameGateway.server.to(gameId).emit('characterRolled', event);
+    return event;
+  }
+
+  /**
+   * Resuelve un ataque de un personaje contra otro de la partida.
+   *
+   * El server decide el arma empuñada, el atributo y la competencia, compara
+   * con la CA guardada del objetivo y tira el daño solo si acierta. El
+   * objetivo no necesita permiso: se puede atacar a cualquiera de la sala.
+   */
+  async attack(
+    gameId: string,
+    userId: number,
+    userName: string,
+    dto: AttackDto,
+  ): Promise<AttackEvent> {
+    const attacker = await this.verifyCharacterPermission(
+      gameId,
+      userId,
+      dto.attackerId,
+    );
+
+    const target = await this.prisma.character.findFirst({
+      where: { id: dto.targetId, gameId },
+    });
+    if (!target) {
+      throw new NotFoundException('Personaje no encontrado en esta partida');
+    }
+
+    const roll = resolveAttack(
+      attacker,
+      { name: target.name, ac: target.armor },
+      dto,
+    );
+
+    const event: AttackEvent = {
+      ...roll,
+      userId,
+      userName,
+      attackerId: attacker.id,
+      attackerName: attacker.name,
+      targetId: target.id,
+      targetName: target.name,
+    };
+
+    this.gameGateway.server.to(gameId).emit('attackResolved', event);
     return event;
   }
 

@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { GameGateway } from './games.gateway';
 import { SetInitiativeDto } from './dto/initiative.dto';
 import { RollCharacterDto } from './dto/roll.dto';
+import { AttackDto } from './dto/attack.dto';
 
 import type { Character, Game } from '@prisma/client';
 
@@ -51,6 +52,54 @@ const mockGateway = {
     to: jest.fn().mockReturnValue({ emit: emitMock }),
   },
 };
+
+// Fuerza 16 (+3) con competencia en Atletismo; nivel 1 => bono +2.
+const aria = {
+  id: 7,
+  name: 'Aria',
+  userId: 1,
+  gameId: 'game-1',
+  is_npc: false,
+  strength: 16,
+  dexterity: 10,
+  constitution: 10,
+  intelligence: 10,
+  wisdom: 10,
+  charisma: 10,
+  level: 1,
+  armor: 14,
+  proficiencies: ['Atletismo'],
+  equipment: [{ name: 'Espada larga', quantity: 1, slot: 'weapon-main' }],
+} as unknown as Character;
+
+const goblin = {
+  id: 9,
+  name: 'Goblin',
+  userId: 1,
+  gameId: 'game-1',
+  is_npc: true,
+  strength: 10,
+  dexterity: 10,
+  constitution: 10,
+  intelligence: 10,
+  wisdom: 10,
+  charisma: 10,
+  level: 1,
+  armor: 13,
+  proficiencies: [],
+  equipment: [],
+} as unknown as Character;
+
+/**
+ * `findFirst` se llama una vez por personaje: el atacante y el objetivo
+ * se distinguen por el id, así ningún test depende del orden de las llamadas.
+ */
+function dispatchCharacters(attacker: unknown, target: unknown): void {
+  mockPrisma.character.findFirst.mockImplementation(
+    (query: { where: { id: number } }) =>
+      Promise.resolve(query.where.id === goblin.id ? target : attacker),
+  );
+}
 
 describe('GamesService – Initiative & Dice', () => {
   let service: GamesService;
@@ -229,23 +278,6 @@ describe('GamesService – Initiative & Dice', () => {
   });
 
   describe('rollCharacter', () => {
-    // Fuerza 16 (+3) con competencia en Atletismo y bono +2 => +5.
-    const aria = {
-      id: 7,
-      name: 'Aria',
-      userId: 1,
-      gameId: 'game-1',
-      is_npc: false,
-      strength: 16,
-      dexterity: 10,
-      constitution: 10,
-      intelligence: 10,
-      wisdom: 10,
-      charisma: 10,
-      level: 1, // bono de competencia +2
-      proficiencies: ['Atletismo'],
-    } as unknown as Character;
-
     const skillDto: RollCharacterDto = {
       gameId: 'game-1',
       characterId: 7,
@@ -342,6 +374,72 @@ describe('GamesService – Initiative & Dice', () => {
           key: 'fly',
         }),
       ).rejects.toThrow('No existe la tirada');
+    });
+  });
+
+  describe('attack', () => {
+    const attackDto: AttackDto = {
+      gameId: 'game-1',
+      attackerId: 7,
+      targetId: 9,
+    };
+
+    beforeEach(() => {
+      mockPrisma.game.findUnique.mockResolvedValue(gameFixture);
+      dispatchCharacters(aria, goblin);
+    });
+
+    it('resolves the attack against the target AC', async () => {
+      const event = await service.attack('game-1', 1, 'dm@test.com', attackDto);
+
+      expect(event.weapon).toBe('Espada larga');
+      expect(event.modifier).toBe(5); // FUE +3 y competencia +2
+      expect(event.targetAc).toBe(13);
+      expect(event.attackerName).toBe('Aria');
+      expect(event.targetName).toBe('Goblin');
+      // Solo hay daño cuando hubo impacto.
+      expect(event.damageTotal === undefined).toBe(!event.hit);
+    });
+
+    it('broadcasts the attack to the room', async () => {
+      await service.attack('game-1', 1, 'dm@test.com', attackDto);
+
+      expect(emitMock).toHaveBeenCalledWith(
+        'attackResolved',
+        expect.objectContaining({
+          attackerId: 7,
+          targetId: 9,
+          targetName: 'Goblin',
+        }),
+      );
+    });
+
+    it('rejects attacking with someone else character', async () => {
+      await expect(
+        service.attack('game-1', 2, 'intruder@test.com', attackDto),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(emitMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects a target that is not in the game', async () => {
+      dispatchCharacters(aria, null);
+
+      await expect(
+        service.attack('game-1', 1, 'dm@test.com', attackDto),
+      ).rejects.toThrow('Personaje no encontrado en esta partida');
+
+      expect(emitMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects when the attacker has no weapon equipped', async () => {
+      dispatchCharacters({ ...aria, equipment: [] }, goblin);
+
+      await expect(
+        service.attack('game-1', 1, 'dm@test.com', attackDto),
+      ).rejects.toThrow('no tiene arma equipada');
+
+      expect(emitMock).not.toHaveBeenCalled();
     });
   });
 });

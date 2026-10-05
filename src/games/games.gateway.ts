@@ -18,6 +18,7 @@ import { CreateChatMessageDto } from './dto/chat.dto';
 import { AddEquipmentDto, RemoveEquipmentDto } from './dto/equipment.dto';
 import { ToggleEquipmentDto } from './dto/toggle-equipment.dto';
 import { RollCharacterDto } from './dto/roll.dto';
+import { AttackDto } from './dto/attack.dto';
 import { Inject, forwardRef } from '@nestjs/common';
 
 interface SocketData {
@@ -324,6 +325,31 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Error al tirar el dado';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('attack')
+  async handleAttack(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: AttackDto,
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      // El service resuelve el ataque y ya emite `attackResolved` a la sala.
+      await this.gamesService.attack(
+        data.gameId,
+        socketData.user.sub,
+        socketData.user.email,
+        data,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Error al atacar';
       client.emit('error', { message });
     }
   }
