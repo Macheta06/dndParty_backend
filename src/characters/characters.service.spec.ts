@@ -299,6 +299,47 @@ describe('CharactersService', () => {
         NotFoundException,
       );
     });
+
+    it('recomputes AC when equipment changes', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+      mockPrisma.character.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...mockCharacter, ...data }),
+      );
+
+      const equipment = [
+        { name: 'Cota de mallas', quantity: 1, slot: 'armor' },
+        { name: 'Escudo', quantity: 1, slot: 'shield' },
+      ];
+      const result = await service.update(1, 7, { equipment });
+
+      expect(result.armor).toBe(18);
+      expect(mockPrisma.character.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: expect.objectContaining({ armor: 18 }),
+      });
+    });
+
+    it('recomputes AC when a DEX stat changes', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+      mockPrisma.character.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...mockCharacter, ...data }),
+      );
+
+      // Rogue con DES 14 sin armadura: 10 + 2 = 12
+      const result = await service.update(1, 7, { dexterity: 14 });
+
+      expect(result.armor).toBe(12);
+    });
+
+    it('leaves AC untouched when neither equipment nor AC stats change', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+      mockPrisma.character.update.mockResolvedValue(mockCharacter);
+
+      await service.update(1, 7, { name: 'Aria', personality_traits: 'Serena' });
+
+      const data = mockPrisma.character.update.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('armor');
+    });
   });
 
   describe('softDelete', () => {

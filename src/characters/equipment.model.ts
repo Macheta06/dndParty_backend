@@ -229,10 +229,13 @@ export function computeAc(
   } else {
     base = 10;
     dexBonus = dex;
-    const cls = normalizeItemName(character.class);
-    if (cls === 'barbarian' || cls === 'barbaro') {
+    // Réplica exacta de la fórmula usada en la creación del personaje
+    // (characters/new): solo se reconocen las clases en inglés que el
+    // formulario emite, para no alterar la CA de personajes ya existentes.
+    const cls = character.class.trim().toLowerCase();
+    if (cls === 'barbarian') {
       classBonus = Math.floor((character.constitution - 10) / 2);
-    } else if (cls === 'monk' || cls === 'monje') {
+    } else if (cls === 'monk') {
       classBonus = Math.floor((character.wisdom - 10) / 2);
     }
   }

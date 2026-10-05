@@ -8,6 +8,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import { UpdateCharacterDto } from './dto/update-character.dto';
+import { computeAc } from './equipment.model';
+import { EquipmentItem } from './equipment.types';
+
+/** Campos que alteran la fórmula de Clase de Armadura. */
+const AC_DRIVERS = ['class', 'dexterity', 'constitution', 'wisdom'] as const;
 
 @Injectable()
 export class CharactersService {
@@ -119,6 +124,27 @@ export class CharactersService {
         feature_traits: feature_traits as Prisma.InputJsonValue,
       }),
     };
+
+    // La CA es derivada: se recalcula cuando cambia el equipamiento o
+    // cualquier stat que entra en su fórmula. El valor calculado tiene
+    // prioridad sobre el `armor` que el cliente reenvía en cada guardado.
+    const touchesAc =
+      equipment !== undefined ||
+      AC_DRIVERS.some((field) => rest[field] !== undefined);
+
+    if (touchesAc) {
+      const merged = { ...character, ...rest };
+      updateData.armor = computeAc(
+        {
+          class: merged.class,
+          dexterity: merged.dexterity,
+          constitution: merged.constitution,
+          wisdom: merged.wisdom,
+        },
+        (equipment as EquipmentItem[] | undefined) ??
+          (character.equipment as EquipmentItem[]),
+      ).ac;
+    }
 
     return this.prisma.character.update({
       where: { id },

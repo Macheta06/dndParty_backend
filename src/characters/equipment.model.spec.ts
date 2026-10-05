@@ -183,7 +183,7 @@ describe('equipment.model', () => {
 
     it('applies CON bonus for unarmored barbarians', () => {
       const result = computeAc(
-        { class: 'Bárbaro', dexterity: 14, constitution: 16, wisdom: 10 },
+        { class: 'Barbarian', dexterity: 14, constitution: 16, wisdom: 10 },
         [],
       );
       expect(result.ac).toBe(15);
@@ -192,11 +192,20 @@ describe('equipment.model', () => {
 
     it('applies WIS bonus for unarmored monks', () => {
       const result = computeAc(
-        { class: 'Monje', dexterity: 14, constitution: 10, wisdom: 15 },
+        { class: 'Monk', dexterity: 14, constitution: 10, wisdom: 15 },
         [],
       );
       expect(result.ac).toBe(14);
       expect(result.classBonus).toBe(2);
+    });
+
+    it('matches the creation formula for other classes', () => {
+      const result = computeAc(
+        { class: 'Wizard', dexterity: 14, constitution: 16, wisdom: 10 },
+        [],
+      );
+      expect(result.ac).toBe(12);
+      expect(result.classBonus).toBe(0);
     });
 
     it('uses the armor base without DEX for heavy armor', () => {
