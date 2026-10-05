@@ -112,7 +112,9 @@ export class CharactersService {
     // El cliente envía el arreglo completo por REST (aquí no hay transición
     // intermedia como en el socket): validamos el estado final resultante.
     if (equipment !== undefined) {
-      const invalid = validateEquipment(equipment as unknown as EquipmentItem[]);
+      const invalid = validateEquipment(
+        equipment as unknown as EquipmentItem[],
+      );
       if (invalid) {
         throw new BadRequestException(invalid);
       }
@@ -140,14 +142,21 @@ export class CharactersService {
       AC_DRIVERS.some((field) => rest[field] !== undefined);
 
     if (touchesAc) {
-      const merged = { ...character, ...rest };
+      // `plainToInstance` (ValidationPipe transform:true) crea TODAS las
+      // propiedades del DTO como propiedades propias, ausentes o no, con
+      // valor `undefined`. Un `{ ...character, ...rest }` pisaría los
+      // valores reales de la DB con `undefined` y computeAc reventaba con
+      // "Cannot read properties of undefined (reading 'trim')".
+      // Cada driver de la CA toma el valor enviado, o el de la DB si no vino.
+      const acInput = {
+        class: rest.class ?? character.class,
+        dexterity: rest.dexterity ?? character.dexterity,
+        constitution: rest.constitution ?? character.constitution,
+        wisdom: rest.wisdom ?? character.wisdom,
+      };
+
       updateData.armor = computeAc(
-        {
-          class: merged.class,
-          dexterity: merged.dexterity,
-          constitution: merged.constitution,
-          wisdom: merged.wisdom,
-        },
+        acInput,
         (equipment as unknown as EquipmentItem[] | undefined) ??
           (character.equipment as unknown as EquipmentItem[]),
       ).ac;

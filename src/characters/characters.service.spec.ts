@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
 import { CharactersService } from './characters.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCharacterDto } from './dto/create-character.dto';
@@ -394,6 +395,71 @@ describe('CharactersService', () => {
           equipment: [{ name: 'Escudo', quantity: 1, slot: 'weapon-offhand' }],
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    // Estos tests van contra una instancia del DTO creada por plainToInstance,
+    // que es lo que realmente ve el service detrás del ValidationPipe. Con un
+    // object literal no se reproduce: plainToInstance agrega TODAS las
+    // propiedades del DTO como propias con valor `undefined`, y ese `undefined`
+    // pisaba los stats de la DB al hacer el spread, reventando computeAc.
+    it('recomputes AC from a pipe-transformed DTO when no armor is equipped', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+      mockPrisma.character.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...mockCharacter, ...data }),
+      );
+
+      const dto = plainToInstance(UpdateCharacterDto, {
+        equipment: [{ name: 'Escudo', quantity: 1, slot: 'shield' }],
+      });
+
+      // Si esto dejara de cumplirse, el test dejaría de reproducir el bug.
+      expect(Object.prototype.hasOwnProperty.call(dto, 'class')).toBe(true);
+      expect(dto.class).toBeUndefined();
+
+      // Rogue DES 14 sin armadura: 10 + 2, +2 de escudo = 14
+      const result = await service.update(1, 7, dto);
+
+      expect(result.armor).toBe(14);
+      expect(lastUpdateCall<{ armor: number }>().data.armor).toBe(14);
+    });
+
+    it('keeps DB stats when a pipe-transformed DTO only carries equipment', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+      mockPrisma.character.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...mockCharacter, ...data }),
+      );
+
+      const dto = plainToInstance(UpdateCharacterDto, {
+        equipment: [{ name: 'Armadura de cuero', quantity: 1, slot: 'armor' }],
+      });
+
+      // Rogue DES 14 + armadura ligera: 11 + 2 = 13. Sin el fix salía NaN
+      // porque dexterity venía del DTO como `undefined`.
+      const result = await service.update(1, 7, dto);
+
+      expect(result.armor).toBe(13);
+    });
+
+    it('uses the DB class for the AC formula when the DTO omits it', async () => {
+      // Bárbaro con CON 16: sin armadura la CA es 10 + DES + CON.
+      mockPrisma.character.findUnique.mockResolvedValue({
+        ...mockCharacter,
+        class: 'barbarian',
+        constitution: 16,
+      });
+      mockPrisma.character.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...mockCharacter, ...data }),
+      );
+
+      const dto = plainToInstance(UpdateCharacterDto, {
+        equipment: [{ name: 'Escudo', quantity: 1, slot: 'shield' }],
+      });
+      expect(dto.class).toBeUndefined();
+
+      const result = await service.update(1, 7, dto);
+
+      // 10 + 2 (DES 14) + 3 (CON 16) + 2 (escudo) = 17
+      expect(result.armor).toBe(17);
     });
   });
 

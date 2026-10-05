@@ -212,7 +212,9 @@ export function unequipItem(
  * arreglo completo que el cliente envía por REST, donde el server no ve el
  * paso intermedio. Devuelve el mensaje de error o `undefined` si es válido.
  */
-export function validateEquipment(equipment: EquipmentItem[]): string | undefined {
+export function validateEquipment(
+  equipment: EquipmentItem[],
+): string | undefined {
   const seen = new Map<EquipmentSlot, string>();
 
   for (const item of equipment) {
@@ -232,7 +234,8 @@ export function validateEquipment(equipment: EquipmentItem[]): string | undefine
 
   const twoHander = equipment.find(
     (item) =>
-      item.slot === 'weapon-main' && resolveItem(item).stats?.twoHanded === true,
+      item.slot === 'weapon-main' &&
+      resolveItem(item).stats?.twoHanded === true,
   );
 
   if (twoHander) {
@@ -289,7 +292,8 @@ export function computeAc(
     // Réplica exacta de la fórmula usada en la creación del personaje
     // (characters/new): solo se reconocen las clases en inglés que el
     // formulario emite, para no alterar la CA de personajes ya existentes.
-    const cls = character.class.trim().toLowerCase();
+    // Un `class` ausente o vacío no es una razón para reventar el guardado.
+    const cls = (character.class ?? '').trim().toLowerCase();
     if (cls === 'barbarian') {
       classBonus = Math.floor((character.constitution - 10) / 2);
     } else if (cls === 'monk') {
