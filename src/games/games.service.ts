@@ -589,6 +589,8 @@ export class GamesService {
           name: dto.name,
           quantity: dto.quantity,
           description: dto.description,
+          ...(dto.category && { category: dto.category }),
+          ...(dto.stats && { stats: dto.stats }),
         },
       ];
     }

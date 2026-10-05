@@ -369,6 +369,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           name: data.name,
           quantity: data.quantity,
           description: data.description,
+          category: data.category,
+          stats: data.stats,
         },
       );
     } catch (err) {

@@ -8,6 +8,7 @@ import { CreateGameDto } from './dto/create-game.dto';
 import { CreateNpcDto } from './dto/create-npc.dto';
 import { JoinGameDto } from './dto/join-game.dto';
 import { UpdateHpDto } from './dto/dm-actions.dto';
+import { EquipmentItem } from '../characters/equipment.types';
 
 import type { Character, Game, Note } from '@prisma/client';
 
@@ -448,6 +449,59 @@ describe('GamesService', () => {
         characterId: 1,
         current_hp: 15,
       });
+    });
+  });
+
+  describe('addEquipment', () => {
+    const setupMaster = (equipment: Character['equipment']) => {
+      mockPrisma.game.findUnique.mockResolvedValue(gameFixture);
+      const character = characterFixture({
+        id: 1,
+        gameId: 'game-1',
+        equipment,
+      });
+      mockPrisma.character.findFirst.mockResolvedValue(character);
+      mockPrisma.character.update.mockImplementation(({ data }) =>
+        Promise.resolve({ ...character, ...data }),
+      );
+      return character;
+    };
+
+    it('stores category and stats for a catalog item', async () => {
+      setupMaster([]);
+
+      await service.addEquipment('game-1', 1, 1, {
+        name: 'Espada larga',
+        quantity: 1,
+        category: 'weapon',
+        stats: { damage: '1d8', damageType: 'cortante' },
+      });
+
+      const call = lastUpdateCall<{ equipment: EquipmentItem[] }>();
+      expect(call.data.equipment).toEqual([
+        {
+          name: 'Espada larga',
+          quantity: 1,
+          description: undefined,
+          category: 'weapon',
+          stats: { damage: '1d8', damageType: 'cortante' },
+        },
+      ]);
+    });
+
+    it('does not change AC when armor is only added to the inventory', async () => {
+      setupMaster([]);
+
+      const result = await service.addEquipment('game-1', 1, 1, {
+        name: 'Cota de mallas',
+        quantity: 1,
+        category: 'armor',
+        stats: { acBase: 16, acFormula: 'flat' },
+      });
+
+      // Agregar al inventario no equipa: la CA sigue siendo la sin armadura
+      // (Rogue DES 14 → 10 + 2). Recién al equiparla pasa a 16.
+      expect(result.armor).toBe(12);
     });
   });
 
