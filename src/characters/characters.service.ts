@@ -3,12 +3,13 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import { UpdateCharacterDto } from './dto/update-character.dto';
-import { computeAc } from './equipment.model';
+import { computeAc, validateEquipment } from './equipment.model';
 import { EquipmentItem } from './equipment.types';
 
 /** Campos que alteran la fórmula de Clase de Armadura. */
@@ -107,6 +108,15 @@ export class CharactersService {
     }
 
     const { feature_traits, equipment, proficiencies, spells, ...rest } = dto;
+
+    // El cliente envía el arreglo completo por REST (aquí no hay transición
+    // intermedia como en el socket): validamos el estado final resultante.
+    if (equipment !== undefined) {
+      const invalid = validateEquipment(equipment as unknown as EquipmentItem[]);
+      if (invalid) {
+        throw new BadRequestException(invalid);
+      }
+    }
 
     const updateData: Prisma.CharacterUpdateInput = {
       ...rest,

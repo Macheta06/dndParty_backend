@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import {
+  BadRequestException,
   NotFoundException,
   ForbiddenException,
   ConflictException,
@@ -353,6 +354,46 @@ describe('CharactersService', () => {
 
       const call = lastUpdateCall();
       expect(call.data).not.toHaveProperty('armor');
+    });
+
+    it('rejects equipment with two items in the same slot', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+
+      await expect(
+        service.update(1, 7, {
+          equipment: [
+            { name: 'Cota de mallas', quantity: 1, slot: 'armor' },
+            { name: 'Cota de escamas', quantity: 1, slot: 'armor' },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.character.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a two-handed weapon equipped alongside a shield', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+
+      await expect(
+        service.update(1, 7, {
+          equipment: [
+            { name: 'Gran hacha', quantity: 1, slot: 'weapon-main' },
+            { name: 'Escudo', quantity: 1, slot: 'shield' },
+          ],
+        }),
+      ).rejects.toThrow('ambas manos');
+
+      expect(mockPrisma.character.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an item placed in a slot it cannot use', async () => {
+      mockPrisma.character.findUnique.mockResolvedValue(mockCharacter);
+
+      await expect(
+        service.update(1, 7, {
+          equipment: [{ name: 'Escudo', quantity: 1, slot: 'weapon-offhand' }],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

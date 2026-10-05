@@ -6,6 +6,7 @@ import {
   normalizeItemName,
   resolveItem,
   unequipItem,
+  validateEquipment,
 } from './equipment.model';
 import { EquipmentItem } from './equipment.types';
 
@@ -168,6 +169,73 @@ describe('equipment.model', () => {
     it('is a no-op for unknown names', () => {
       const source = [item('Daga')];
       expect(unequipItem(source, 'Hacha')).toEqual(source);
+    });
+  });
+
+  describe('validateEquipment', () => {
+    it('accepts an empty inventory', () => {
+      expect(validateEquipment([])).toBeUndefined();
+    });
+
+    it('accepts armor, shield and a one-handed weapon together', () => {
+      expect(
+        validateEquipment([
+          item('Cota de mallas', { slot: 'armor' }),
+          item('Escudo', { slot: 'shield' }),
+          item('Espada larga', { slot: 'weapon-main' }),
+          item('Daga', { slot: 'weapon-offhand' }),
+        ]),
+      ).toBeUndefined();
+    });
+
+    it('rejects two items sharing the same slot', () => {
+      const error = validateEquipment([
+        item('Cota de mallas', { slot: 'armor' }),
+        item('Cota de escamas', { slot: 'armor' }),
+      ]);
+
+      expect(error).toContain('armor');
+      expect(error).toContain('Cota de mallas');
+      expect(error).toContain('Cota de escamas');
+    });
+
+    it('rejects a two-handed weapon sharing the slot with a shield', () => {
+      const error = validateEquipment([
+        item('Gran hacha', { slot: 'weapon-main' }),
+        item('Escudo', { slot: 'shield' }),
+      ]);
+
+      expect(error).toContain('ambas manos');
+      expect(error).toContain('Gran hacha');
+      expect(error).toContain('Escudo');
+    });
+
+    it('rejects a two-handed weapon sharing the slot with an offhand weapon', () => {
+      const error = validateEquipment([
+        item('Gran espada', { slot: 'weapon-main' }),
+        item('Daga', { slot: 'weapon-offhand' }),
+      ]);
+
+      expect(error).toContain('ambas manos');
+      expect(error).toContain('Daga');
+    });
+
+    it('rejects an item equipped in a slot it cannot use', () => {
+      const error = validateEquipment([
+        item('Escudo', { slot: 'weapon-offhand' }),
+      ]);
+
+      expect(error).toContain('no puede equiparse');
+    });
+
+    it('ignores items that are not equipped', () => {
+      expect(
+        validateEquipment([
+          item('Gran hacha'),
+          item('Escudo'),
+          item('Cota de mallas', { slot: 'armor' }),
+        ]),
+      ).toBeUndefined();
     });
   });
 

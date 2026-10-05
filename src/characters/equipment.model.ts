@@ -204,6 +204,55 @@ export function unequipItem(
 }
 
 /**
+ * Valida el ESTADO final del equipamiento (no una transición): dos objetos no
+ * pueden compartir slot y un arma a dos manos no puede convivir con escudo ni
+ * con arma secundaria.
+ *
+ * El camino de sockets valida la transición con `equipItem`; este valida el
+ * arreglo completo que el cliente envía por REST, donde el server no ve el
+ * paso intermedio. Devuelve el mensaje de error o `undefined` si es válido.
+ */
+export function validateEquipment(equipment: EquipmentItem[]): string | undefined {
+  const seen = new Map<EquipmentSlot, string>();
+
+  for (const item of equipment) {
+    if (!item.slot) continue;
+
+    const owner = seen.get(item.slot);
+    if (owner !== undefined) {
+      return `Dos objetos no pueden ocupar el slot «${item.slot}»: ${owner} y ${item.name}`;
+    }
+
+    if (!getAllowedSlots(item).includes(item.slot)) {
+      return `«${item.name}» no puede equiparse en el slot «${item.slot}»`;
+    }
+
+    seen.set(item.slot, item.name);
+  }
+
+  const twoHander = equipment.find(
+    (item) =>
+      item.slot === 'weapon-main' && resolveItem(item).stats?.twoHanded === true,
+  );
+
+  if (twoHander) {
+    const blockers = equipment
+      .filter(
+        (item) =>
+          item !== twoHander &&
+          (item.slot === 'shield' || item.slot === 'weapon-offhand'),
+      )
+      .map((item) => item.name);
+
+    if (blockers.length > 0) {
+      return `«${twoHander.name}» necesita ambas manos. Desequipa antes: ${blockers.join(', ')}`;
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Calcula la CA en función del equipamiento.
  * Sin armadura equipada usa la fórmula sin armadura de la clase
  * (10 + DES, +CON para bárbaro, +SAB para monje).
