@@ -78,7 +78,13 @@ export interface RollCharacter {
   intelligence: number;
   wisdom: number;
   charisma: number;
-  proficiency: number;
+  /**
+   * El bono de competencia sale del nivel, igual que en la hoja
+   * (`getProficiencyBonus`). La columna `proficiency` de la DB nunca la
+   * escribe el cliente y se queda en 2: usarla haría que la hoja muestre un
+   * bono distinto del que se juega.
+   */
+  level: number;
   /** `proficiencies` de la DB: nombres de habilidades y salvaciones. */
   proficiencies: unknown;
 }
@@ -118,6 +124,11 @@ export interface CharacterRoll {
 /** Modificador de un atributo: 10 es +0, 20 es +5. */
 export function getModifier(score: number): number {
   return Math.floor((score - 10) / 2);
+}
+
+/** Bono de competencia por nivel: +2 al 1, +3 al 5, +4 al 9... */
+export function getProficiencyBonus(level: number): number {
+  return Math.floor((Math.max(1, level) - 1) / 4) + 2;
 }
 
 function normalizeLabel(value: string): string {
@@ -192,7 +203,9 @@ export function resolveRoll(
   const advantage = request.advantage ?? 'normal';
   const statModifier = getModifier(character[definition.stat]);
   const proficient = isProficient(character.proficiencies, definition.name);
-  const proficiencyBonus = proficient ? character.proficiency : 0;
+  const proficiencyBonus = proficient
+    ? getProficiencyBonus(character.level)
+    : 0;
   const modifier = statModifier + proficiencyBonus;
 
   const { dice, kept } = rollD20(advantage, rng);

@@ -242,7 +242,7 @@ describe('GamesService – Initiative & Dice', () => {
       intelligence: 10,
       wisdom: 10,
       charisma: 10,
-      proficiency: 2,
+      level: 1, // bono de competencia +2
       proficiencies: ['Atletismo'],
     } as unknown as Character;
 

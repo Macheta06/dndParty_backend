@@ -1,6 +1,7 @@
 import {
   findRollDefinition,
   getModifier,
+  getProficiencyBonus,
   isProficient,
   resolveRoll,
   rollD20,
@@ -20,7 +21,7 @@ const character: RollCharacter = {
   intelligence: 12, // +1
   wisdom: 10, // +0
   charisma: 10, // +0
-  proficiency: 3,
+  level: 9, // bono de competencia +4
   proficiencies: ['Atletismo', 'Salvación de Destreza'],
 };
 
@@ -35,6 +36,19 @@ describe('rolls.model', () => {
       [1, -5],
     ])('score %i gives %+i', (score, expected) => {
       expect(getModifier(score)).toBe(expected);
+    });
+  });
+
+  describe('getProficiencyBonus', () => {
+    it.each([
+      [1, 2],
+      [4, 2],
+      [5, 3],
+      [8, 3],
+      [9, 4],
+      [17, 6],
+    ])('level %i gives +%i', (level, expected) => {
+      expect(getProficiencyBonus(level)).toBe(expected);
     });
   });
 
@@ -110,9 +124,9 @@ describe('rolls.model', () => {
       expect(roll.label).toBe('Atletismo');
       expect(roll.statModifier).toBe(3);
       expect(roll.proficient).toBe(true);
-      expect(roll.proficiencyBonus).toBe(3);
-      expect(roll.modifier).toBe(6);
-      expect(roll.total).toBe(26);
+      expect(roll.proficiencyBonus).toBe(4);
+      expect(roll.modifier).toBe(7);
+      expect(roll.total).toBe(27);
     });
 
     it('skips proficiency for a skill the character lacks', () => {
@@ -137,7 +151,7 @@ describe('rolls.model', () => {
 
       expect(roll.label).toBe('Salvación de Destreza');
       expect(roll.proficient).toBe(true);
-      expect(roll.modifier).toBe(-1 + 3);
+      expect(roll.modifier).toBe(-1 + 4);
     });
 
     it('does not grant proficiency on a saving throw that was not taken', () => {
@@ -152,6 +166,7 @@ describe('rolls.model', () => {
     });
 
     it('reports success against a DC and failure below it', () => {
+      // total = 20 + 7 = 27
       const ok = resolveRoll(
         character,
         { kind: 'skill', key: 'athletics', dc: 26 },
@@ -159,7 +174,7 @@ describe('rolls.model', () => {
       );
       const ko = resolveRoll(
         character,
-        { kind: 'skill', key: 'athletics', dc: 27 },
+        { kind: 'skill', key: 'athletics', dc: 28 },
         fixedRng(0.95),
       );
 
@@ -189,7 +204,7 @@ describe('rolls.model', () => {
       expect(roll.advantage).toBe('disadvantage');
       expect(roll.dice).toEqual([20, 1]);
       expect(roll.kept).toBe(1);
-      expect(roll.total).toBe(1 + 6);
+      expect(roll.total).toBe(1 + 7);
     });
 
     it('throws for a roll that does not exist', () => {
