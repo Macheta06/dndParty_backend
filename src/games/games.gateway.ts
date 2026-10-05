@@ -17,6 +17,7 @@ import { GrantXpDto } from './dto/grant-xp.dto';
 import { CreateChatMessageDto } from './dto/chat.dto';
 import { AddEquipmentDto, RemoveEquipmentDto } from './dto/equipment.dto';
 import { ToggleEquipmentDto } from './dto/toggle-equipment.dto';
+import { RollCharacterDto } from './dto/roll.dto';
 import { Inject, forwardRef } from '@nestjs/common';
 
 interface SocketData {
@@ -297,6 +298,32 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Error al tirar dados';
+      client.emit('error', { message });
+    }
+  }
+
+  @SubscribeMessage('rollCharacter')
+  async handleRollCharacter(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: RollCharacterDto,
+  ): Promise<void> {
+    const socketData = getSocketData(client);
+    if (!socketData.user) {
+      client.emit('error', { message: 'No autenticado' });
+      return;
+    }
+
+    try {
+      // El service resuelve la tirada y ya emite `characterRolled` a la sala.
+      await this.gamesService.rollCharacter(
+        data.gameId,
+        socketData.user.sub,
+        socketData.user.email,
+        data,
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Error al tirar el dado';
       client.emit('error', { message });
     }
   }

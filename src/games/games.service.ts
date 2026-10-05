@@ -27,6 +27,8 @@ import {
   unequipItem,
 } from '../characters/equipment.model';
 import { EquipmentItem, EquipmentSlot } from '../characters/equipment.types';
+import { RollCharacterDto } from './dto/roll.dto';
+import { CharacterRoll, resolveRoll } from '../characters/rolls.model';
 
 /** Slot por defecto al equipar: armadura → armor, escudo → shield, arma → mano principal. */
 function defaultSlot(item: EquipmentItem): EquipmentSlot {
@@ -53,6 +55,14 @@ interface DiceRollResult {
   formula: string;
   rolls: number[];
   total: number;
+}
+
+/** Tira de habilidad o salvación ya resuelta por el server. */
+export interface CharacterRollEvent extends CharacterRoll {
+  userId: number;
+  userName: string;
+  characterId: number;
+  characterName: string;
 }
 
 @Injectable()
@@ -478,6 +488,49 @@ export class GamesService {
       rolls,
       total: sum + modifier,
     };
+  }
+
+  /**
+   * Tira una habilidad o salvación de un personaje de la partida.
+   *
+   * El server resuelve el atributo, la competencia y el bono: el cliente solo
+   * pide la tirada, así que nadie suma nada a mano ni puede inflar el número.
+   * Solo el dueño de un PJ o el DM pueden tirar por alguien.
+   */
+  async rollCharacter(
+    gameId: string,
+    userId: number,
+    userName: string,
+    dto: RollCharacterDto,
+  ): Promise<CharacterRollEvent> {
+    const game = await this.verifyGameAccess(gameId, userId);
+
+    const character = await this.prisma.character.findFirst({
+      where: { id: dto.characterId, gameId },
+    });
+    if (!character) {
+      throw new NotFoundException('Personaje no encontrado en esta partida');
+    }
+
+    const isMaster = game.masterId === userId;
+    if (!isMaster && character.userId !== userId) {
+      throw new ForbiddenException(
+        'Solo puedes tirar por tus propios personajes',
+      );
+    }
+
+    const roll = resolveRoll(character, dto);
+
+    const event: CharacterRollEvent = {
+      ...roll,
+      userId,
+      userName,
+      characterId: character.id,
+      characterName: character.name,
+    };
+
+    this.gameGateway.server.to(gameId).emit('characterRolled', event);
+    return event;
   }
 
   async grantXp(gameId: string, userId: number, dto: GrantXpDto) {

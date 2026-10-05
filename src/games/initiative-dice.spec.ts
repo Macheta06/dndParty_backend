@@ -4,8 +4,9 @@ import { GamesService, InitiativeState } from './games.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GameGateway } from './games.gateway';
 import { SetInitiativeDto } from './dto/initiative.dto';
+import { RollCharacterDto } from './dto/roll.dto';
 
-import type { Game } from '@prisma/client';
+import type { Character, Game } from '@prisma/client';
 
 const gameFixture: Game = {
   id: 'game-1',
@@ -40,6 +41,7 @@ const mockPrisma = {
   },
   character: {
     findMany: jest.fn().mockResolvedValue([]),
+    findFirst: jest.fn(),
   },
 };
 
@@ -223,6 +225,123 @@ describe('GamesService – Initiative & Dice', () => {
       expect(() => service.rollDice(1, 'dm@test.com', 'd1001')).toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe('rollCharacter', () => {
+    // Fuerza 16 (+3) con competencia en Atletismo y bono +2 => +5.
+    const aria = {
+      id: 7,
+      name: 'Aria',
+      userId: 1,
+      gameId: 'game-1',
+      is_npc: false,
+      strength: 16,
+      dexterity: 10,
+      constitution: 10,
+      intelligence: 10,
+      wisdom: 10,
+      charisma: 10,
+      proficiency: 2,
+      proficiencies: ['Atletismo'],
+    } as unknown as Character;
+
+    const skillDto: RollCharacterDto = {
+      gameId: 'game-1',
+      characterId: 7,
+      kind: 'skill',
+      key: 'athletics',
+    };
+
+    beforeEach(() => {
+      mockPrisma.game.findUnique.mockResolvedValue(gameFixture);
+      mockPrisma.character.findFirst.mockResolvedValue(aria);
+    });
+
+    it('resolves the modifier from the character itself', async () => {
+      const event = await service.rollCharacter(
+        'game-1',
+        1,
+        'dm@test.com',
+        skillDto,
+      );
+
+      expect(event.label).toBe('Atletismo');
+      expect(event.statModifier).toBe(3);
+      expect(event.proficient).toBe(true);
+      expect(event.proficiencyBonus).toBe(2);
+      expect(event.modifier).toBe(5);
+      expect(event.total).toBeGreaterThanOrEqual(6);
+      expect(event.total).toBeLessThanOrEqual(25);
+      expect(event.characterName).toBe('Aria');
+    });
+
+    it('does not grant proficiency on an untrained skill', async () => {
+      const event = await service.rollCharacter('game-1', 1, 'dm@test.com', {
+        ...skillDto,
+        key: 'stealth',
+      });
+
+      expect(event.proficient).toBe(false);
+      expect(event.modifier).toBe(0);
+    });
+
+    it('broadcasts the roll to the room', async () => {
+      await service.rollCharacter('game-1', 1, 'dm@test.com', skillDto);
+
+      expect(emitMock).toHaveBeenCalledWith(
+        'characterRolled',
+        expect.objectContaining({
+          characterId: 7,
+          characterName: 'Aria',
+          userName: 'dm@test.com',
+        }),
+      );
+    });
+
+    it('rejects rolling another player character', async () => {
+      // El dueño es el usuario 1; tira el 2 (y no es el DM).
+      await expect(
+        service.rollCharacter('game-1', 2, 'intruder@test.com', skillDto),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(emitMock).not.toHaveBeenCalled();
+    });
+
+    it('lets the dungeon master roll any character in the game', async () => {
+      mockPrisma.game.findUnique.mockResolvedValue({
+        ...gameFixture,
+        masterId: 9,
+      });
+      mockPrisma.character.findFirst.mockResolvedValue({
+        ...aria,
+        userId: 1,
+      });
+
+      const event = await service.rollCharacter('game-1', 9, 'dm@test.com', {
+        ...skillDto,
+        kind: 'save',
+        key: 'save:wisdom',
+      });
+
+      expect(event.label).toBe('Salvación de Sabiduría');
+    });
+
+    it('rejects a character that is not in the game', async () => {
+      mockPrisma.character.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.rollCharacter('game-1', 1, 'dm@test.com', skillDto),
+      ).rejects.toThrow('Personaje no encontrado en esta partida');
+    });
+
+    it('rejects a roll that does not exist', async () => {
+      await expect(
+        service.rollCharacter('game-1', 1, 'dm@test.com', {
+          ...skillDto,
+          key: 'fly',
+        }),
+      ).rejects.toThrow('No existe la tirada');
     });
   });
 });
